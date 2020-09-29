@@ -243,6 +243,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         tokenCache = new DelegationTokenCache(ScramMechanism.mechanismNames)
         credentialProvider = new CredentialProvider(ScramMechanism.mechanismNames, tokenCache)
 
+        // 网络相关模块初始化
         socketServer = new SocketServer(config, metrics, time, credentialProvider)
         socketServer.startup()
 

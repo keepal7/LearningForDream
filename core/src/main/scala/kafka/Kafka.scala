@@ -78,7 +78,9 @@ object Kafka extends Logging {
 
   def main(args: Array[String]): Unit = {
     try {
+      // 拿到配置信息
       val serverProps = getPropsFromArgs(args)
+      // 根据配置信息，构造kafkaServerStartable
       val kafkaServerStartable = KafkaServerStartable.fromProps(serverProps)
 
       // register signal handler to log termination due to SIGTERM, SIGHUP and SIGINT (control-c)
@@ -88,7 +90,7 @@ object Kafka extends Logging {
       Runtime.getRuntime().addShutdownHook(new Thread("kafka-shutdown-hook") {
         override def run(): Unit = kafkaServerStartable.shutdown()
       })
-
+      // 启动
       kafkaServerStartable.startup()
       kafkaServerStartable.awaitShutdown()
     }
