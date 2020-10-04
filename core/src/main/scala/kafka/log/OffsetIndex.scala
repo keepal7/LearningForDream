@@ -140,6 +140,9 @@ class OffsetIndex(_file: File, baseOffset: Long, maxIndexSize: Int = -1, writabl
       require(!isFull, "Attempt to append to a full index (size = " + _entries + ").")
       if (_entries == 0 || offset > _lastOffset) {
         debug("Adding index entry %d => %d to %s.".format(offset, position, file.getName))
+        // 通过MappedByteBuffer的内存映射技术（就是通过os cache来映射磁盘上的文件）用来加快索引写入的速度。
+        // 另外就是，我们可以看到这个稀疏索引的结构：
+        // <相对位移:物理地址>这么个形式存在的
         mmap.putInt((offset - baseOffset).toInt)
         mmap.putInt(position)
         _entries += 1

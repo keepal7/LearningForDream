@@ -87,9 +87,14 @@ public class MemoryRecords extends AbstractRecords {
      * @throws IOException For any IO errors writing to the channel
      */
     public int writeFullyTo(GatheringByteChannel channel) throws IOException {
+        // 这个buffermemoryRecords中的一个属性
+        // 在初始化的时候被赋值的
+        // 那么在哪里初始化的呢？这个是从ProduceRequest中被取出来的
         buffer.mark();
+        // 经典的NIO写文件循环操作
         int written = 0;
         while (written < sizeInBytes())
+            // 直接写os cache中，而不是写在磁盘文件里
             written += channel.write(buffer);
         buffer.reset();
         return written;

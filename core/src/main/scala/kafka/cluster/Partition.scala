@@ -61,6 +61,7 @@ class Partition(val topic: String,
   // The read lock is only required when multiple reads are executed and needs to be in a consistent manner
   private val leaderIsrUpdateLock = new ReentrantReadWriteLock
   private var zkVersion: Int = LeaderAndIsr.initialZKVersion
+  // leader的纪元信息
   @volatile private var leaderEpoch: Int = LeaderAndIsr.initialLeaderEpoch - 1
   @volatile var leaderReplicaIdOpt: Option[Int] = None
   @volatile var inSyncReplicas: Set[Replica] = Set.empty[Replica]
@@ -562,19 +563,27 @@ class Partition(val topic: String,
   }
 
   def appendRecordsToLeader(records: MemoryRecords, isFromClient: Boolean, requiredAcks: Int = 0): LogAppendInfo = {
+    // 读写锁
     val (info, leaderHWIncremented) = inReadLock(leaderIsrUpdateLock) {
+      // 判断这个这个分区的leader副本是否在本地
       leaderReplicaIfLocal match {
         case Some(leaderReplica) =>
+          // 拿到log对象
           val log = leaderReplica.log.get
+          // 读取配置，ISR列表中最少元素的个数
           val minIsr = log.config.minInSyncReplicas
+          // 获取ISR列表的元素个数
           val inSyncSize = inSyncReplicas.size
 
           // Avoid writing to leader if there are not enough insync replicas to make it safe
+          // 如果ISR列表中的元素个数小于配置
+          // 并且还要求全部副本写入的话，就抛出异常
+          // 异常在上层捕获以后，封装成res后返回
           if (inSyncSize < minIsr && requiredAcks == -1) {
             throw new NotEnoughReplicasException("Number of insync replicas for partition %s is [%d], below required minimum [%d]"
               .format(topicPartition, inSyncSize, minIsr))
           }
-
+          // 通过log对象来进行本地文件操作
           val info = log.appendAsLeader(records, leaderEpoch = this.leaderEpoch, isFromClient)
           // probably unblock some follower fetch requests since log end offset has been updated
           replicaManager.tryCompleteDelayedFetch(TopicPartitionOperationKey(this.topic, this.partitionId))

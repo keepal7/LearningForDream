@@ -125,8 +125,12 @@ class TimeIndex(_file: File, baseOffset: Long, maxIndexSize: Int = -1, writable:
       // We only append to the time index when the timestamp is greater than the last inserted timestamp.
       // If all the messages are in message format v0, the timestamp will always be NoTimestamp. In that case, the time
       // index will be empty.
+      // 当前时间戳，要大于已被插入的最后一条消息的时间戳
+      // 如果所有的消息都是v0版本的，那么就不会有时间戳，那么对应的index也会是空的
       if (timestamp > lastEntry.timestamp) {
         debug("Adding index entry %d => %d to %s.".format(timestamp, offset, file.getName))
+        // 基于时间戳的索引，结构类似于非聚集索引，格式为
+        // <timestamp:相对位移>
         mmap.putLong(timestamp)
         mmap.putInt((offset - baseOffset).toInt)
         _entries += 1

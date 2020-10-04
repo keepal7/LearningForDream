@@ -133,6 +133,7 @@ class LogSegment private[log] (val log: FileRecords,
         rollingBasedTimestamp = Some(largestTimestamp)
       // append the messages
       require(canConvertToRelativeOffset(largestOffset), "largest offset in message set can not be safely converted to relative offset.")
+      // 利用FileRecords完成消息写入
       val appendedBytes = log.append(records)
       trace(s"Appended $appendedBytes to ${log.file()} at offset $firstOffset")
       // Update the in memory max timestamp and corresponding offset.
@@ -141,9 +142,16 @@ class LogSegment private[log] (val log: FileRecords,
         offsetOfMaxTimestamp = shallowOffsetOfMaxTimestamp
       }
       // append an entry to the index (if needed)
+      // 写稀疏索引，稀疏索引其实就是不需要为每一条数据都建立索引，
+      // 每隔一批数据，即保存一份索引，包含虚拟标签:物理地址
+      // 默认值是4096，也就是每隔4096个字节，就写一个索引信息到.index文件中
       if(bytesSinceLastIndexEntry > indexIntervalBytes) {
+        // 插入位移稀疏索引
         offsetIndex.append(firstOffset, physicalPosition)
+        // 不一定会插入，所以是maybeAppend
+        // 因为可能一个时间内，生产了大量的数据，超过了4094b，但是时间戳都是一样的
         timeIndex.maybeAppend(maxTimestampSoFar, offsetOfMaxTimestamp)
+        // 清空累加位
         bytesSinceLastIndexEntry = 0
       }
       bytesSinceLastIndexEntry += records.sizeInBytes
@@ -388,6 +396,8 @@ class LogSegment private[log] (val log: FileRecords,
    */
   @threadsafe
   def flush() {
+    // log文件，通过NioChannel.force刷盘
+    // 其他索引文件，通过mmap.force刷盘
     LogFlushStats.logFlushTimer.time {
       log.flush()
       offsetIndex.flush()

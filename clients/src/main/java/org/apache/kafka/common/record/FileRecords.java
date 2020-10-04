@@ -371,6 +371,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
                                    boolean fileAlreadyExists,
                                    int initFileSize,
                                    boolean preallocate) throws IOException {
+        // 拿到这个log文件对应的fileChannel
         FileChannel channel = openChannel(file, mutable, fileAlreadyExists, initFileSize, preallocate);
         int end = (!fileAlreadyExists && preallocate) ? 0 : Integer.MAX_VALUE;
         return new FileRecords(file, channel, 0, end, false);
@@ -406,6 +407,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
                                            boolean fileAlreadyExists,
                                            int initFileSize,
                                            boolean preallocate) throws IOException {
+        // 通过RandomAccessFile拿到对应的fileChannel
         if (mutable) {
             if (fileAlreadyExists) {
                 return new RandomAccessFile(file, "rw").getChannel();

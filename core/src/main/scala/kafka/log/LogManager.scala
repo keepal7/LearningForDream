@@ -247,11 +247,13 @@ class LogManager(logDirs: Seq[File],
 
   private def loadLog(logDir: File, recoveryPoints: Map[TopicPartition, Long], logStartOffsets: Map[TopicPartition, Long]): Unit = {
     debug("Loading log '" + logDir.getName + "'")
+    // 拿到topic-partition
     val topicPartition = Log.parseTopicPartitionName(logDir)
+    // 这个tp对应的配置
     val config = topicConfigs.getOrElse(topicPartition.topic, currentDefaultConfig)
     val logRecoveryPoint = recoveryPoints.getOrElse(topicPartition, 0L)
     val logStartOffset = logStartOffsets.getOrElse(topicPartition, 0L)
-
+    // 封装成一个log对象
     val log = Log(
       dir = logDir,
       config = config,
@@ -263,10 +265,11 @@ class LogManager(logDirs: Seq[File],
       time = time,
       brokerTopicStats = brokerTopicStats,
       logDirFailureChannel = logDirFailureChannel)
-
+    // 如果一个文件以【-delete】结尾，则加入到删除的队列中
     if (logDir.getName.endsWith(Log.DeleteDirSuffix)) {
       addLogToBeDeleted(log)
     } else {
+      // previous这个就是之前有值的话，就会返回之前的那个对象。
       val previous = {
         if (log.isFuture)
           this.futureLogs.put(topicPartition, log)
@@ -294,9 +297,10 @@ class LogManager(logDirs: Seq[File],
     val threadPools = ArrayBuffer.empty[ExecutorService]
     val offlineDirs = mutable.Set.empty[(String, IOException)]
     val jobs = mutable.Map.empty[File, Seq[Future[_]]]
-
+    // dirs可以配置多个 这里就是遍历多个dirs，都搞这么一套东西
     for (dir <- liveLogDirs) {
       try {
+        // 创建线程池，这里numRecoveryThreadsPerDataDir实际上是IOThread
         val pool = Executors.newFixedThreadPool(numRecoveryThreadsPerDataDir)
         threadPools.append(pool)
 
@@ -325,13 +329,14 @@ class LogManager(logDirs: Seq[File],
           case e: Exception =>
             warn("Error occurred while reading log-start-offset-checkpoint file of directory " + dir, e)
         }
-
+        // 遍历dirs，然后拿到底下的文件或目录，赋值给logDir
         val jobsForDir = for {
           dirContent <- Option(dir.listFiles).toList
           logDir <- dirContent if logDir.isDirectory
         } yield {
           CoreUtils.runnable {
             try {
+              // 加载这些log文件
               loadLog(logDir, recoveryPoints, logStartOffsets)
             } catch {
               case e: IOException =>
@@ -340,6 +345,7 @@ class LogManager(logDirs: Seq[File],
             }
           }
         }
+        // 提交一个清理任务
         jobs(cleanShutdownFile) = jobsForDir.map(pool.submit)
       } catch {
         case e: IOException =>

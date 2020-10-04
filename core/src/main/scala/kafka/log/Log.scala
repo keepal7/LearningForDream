@@ -426,6 +426,7 @@ class Log(@volatile var dir: File,
   }
 
   private def updateLogEndOffset(messageOffset: Long) {
+    // 这个nextOffsetMetadata其实就是LEO信息
     nextOffsetMetadata = new LogOffsetMetadata(messageOffset, activeSegment.baseOffset, activeSegment.size)
   }
 
@@ -638,6 +639,7 @@ class Log(@volatile var dir: File,
    */
   private def append(records: MemoryRecords, isFromClient: Boolean, assignOffsets: Boolean, leaderEpoch: Int): LogAppendInfo = {
     maybeHandleIOException(s"Error while appending records to $topicPartition in dir ${dir.getParent}") {
+      // 分析records
       val appendInfo = analyzeAndValidateRecords(records, isFromClient = isFromClient)
 
       // return if we have no valid messages or if this is a duplicate of the last appended entry
@@ -648,13 +650,16 @@ class Log(@volatile var dir: File,
       var validRecords = trimInvalidBytes(records, appendInfo)
 
       // they are valid, insert them in the log
+      // 并发控制
       lock synchronized {
         checkIfMemoryMappedBufferClosed()
         if (assignOffsets) {
           // assign offsets to the message set
+          // 拿到当前的offset
           val offset = new LongRef(nextOffsetMetadata.messageOffset)
           appendInfo.firstOffset = offset.value
           val now = time.milliseconds
+          // 校验
           val validateAndOffsetAssignResult = try {
             LogValidator.validateMessagesAndAssignOffsets(validRecords,
               offset,
@@ -681,6 +686,7 @@ class Log(@volatile var dir: File,
 
           // re-validate message sizes if there's a possibility that they have changed (due to re-compression or message
           // format conversion)
+          // 消息大小校验
           if (validateAndOffsetAssignResult.messageSizeMaybeChanged) {
             for (batch <- validRecords.batches.asScala) {
               if (batch.sizeInBytes > config.maxMessageSize) {
@@ -723,6 +729,7 @@ class Log(@volatile var dir: File,
         }
 
         // maybe roll the log if this segment is full
+        // 如果一个segment写满了，就创建个新的
         val segment = maybeRoll(messagesSize = validRecords.sizeInBytes,
           maxTimestampInMessages = appendInfo.maxTimestamp,
           maxOffsetInMessages = appendInfo.lastOffset)
@@ -732,6 +739,7 @@ class Log(@volatile var dir: File,
           segmentBaseOffset = segment.baseOffset,
           relativePositionInSegment = segment.size)
 
+        // 通过segment写入磁盘
         segment.append(firstOffset = appendInfo.firstOffset,
           largestOffset = appendInfo.lastOffset,
           largestTimestamp = appendInfo.maxTimestamp,
@@ -756,9 +764,10 @@ class Log(@volatile var dir: File,
         producerStateManager.updateMapEndOffset(appendInfo.lastOffset + 1)
 
         // increment the log end offset
+        // 更新本地的LEO
         updateLogEndOffset(appendInfo.lastOffset + 1)
 
-        // update the first unstable offset (which is used to compute LSO)
+        // update the first unstable offset (which is used to compute LSO)`
         updateFirstUnstableOffset()
 
         trace(s"Appended message set with last offset: ${appendInfo.lastOffset}, " +
@@ -766,6 +775,9 @@ class Log(@volatile var dir: File,
           s"next offset: ${nextOffsetMetadata.messageOffset}, " +
           s"and messages: $validRecords")
 
+        // 刷盘控制
+        // 默认情况下，这个flushInterval是int.max，默认不生效
+        // 但是可以配置，让其生效
         if (unflushedMessages >= config.flushInterval)
           flush()
 
@@ -1283,8 +1295,11 @@ class Log(@volatile var dir: File,
    * @return The currently active segment after (perhaps) rolling to a new segment
    */
   private def maybeRoll(messagesSize: Int, maxTimestampInMessages: Long, maxOffsetInMessages: Long): LogSegment = {
+    // 拿到activeSegment
     val segment = activeSegment
     val now = time.milliseconds
+    // 这里的判断套件其实就是 curSize+activeSize 是否大于了配置的限制大小
+    // 如果大于，则执行roll函数，重新搞一个segment出来
     if (segment.shouldRoll(messagesSize, maxTimestampInMessages, maxOffsetInMessages, now)) {
       debug(s"Rolling new log segment (log_size = ${segment.size}/${config.segmentSize}}, " +
           s"offset_index_size = ${segment.offsetIndex.entries}/${segment.offsetIndex.maxEntries}, " +
@@ -1315,13 +1330,17 @@ class Log(@volatile var dir: File,
   def roll(expectedNextOffset: Long = 0): LogSegment = {
     maybeHandleIOException(s"Error while rolling log segment for $topicPartition in dir ${dir.getParent}") {
       val start = time.hiResClockMs()
+      // 加锁
       lock synchronized {
         checkIfMemoryMappedBufferClosed()
+        // 从这里可以看到，其实就是用LEO作为下一个segment的名字
         val newOffset = math.max(expectedNextOffset, logEndOffset)
+        // 创建对应的一组文件：.log/.index/.timeindex/.txnindex
         val logFile = Log.logFile(dir, newOffset)
         val offsetIdxFile = offsetIndexFile(dir, newOffset)
         val timeIdxFile = timeIndexFile(dir, newOffset)
         val txnIdxFile = transactionIndexFile(dir, newOffset)
+        // 如果这些文件已存在，则执行删除，log可以作为问题查询入口
         for (file <- List(logFile, offsetIdxFile, timeIdxFile, txnIdxFile) if file.exists) {
           warn(s"Newly rolled segment file ${file.getAbsolutePath} already exists; deleting it first")
           Files.delete(file.toPath)
@@ -1336,7 +1355,7 @@ class Log(@volatile var dir: File,
         // we manually override the state offset here prior to taking the snapshot.
         producerStateManager.updateMapEndOffset(newOffset)
         producerStateManager.takeSnapshot()
-
+        // 封装出来一个segment
         val segment = LogSegment.open(dir,
           baseOffset = newOffset,
           config,
@@ -1344,6 +1363,7 @@ class Log(@volatile var dir: File,
           fileAlreadyExists = false,
           initFileSize = initFileSize,
           preallocate = config.preallocate)
+        // 缓存起来
         val prev = addSegment(segment)
         if (prev != null)
           throw new KafkaException("Trying to roll a new log segment for topic partition %s with start offset %d while it already exists.".format(name, newOffset))
@@ -1354,7 +1374,7 @@ class Log(@volatile var dir: File,
         scheduler.schedule("flush-log", () => flush(newOffset), delay = 0L)
 
         info(s"Rolled new log segment at offset $newOffset in ${time.hiResClockMs() - start} ms.")
-
+        // 返回刚才的segment
         segment
       }
     }
@@ -1362,6 +1382,10 @@ class Log(@volatile var dir: File,
 
   /**
    * The number of messages appended to the log since the last flush
+    * logEndOffset:LEO，假如是23901，
+    * recoveryPoint: 已经写入磁盘的offset+1，假如是23801
+    * 那么这两者的差值，就是相当于还没有刷盘的消息数，就是100条
+    *
    */
   def unflushedMessages: Long = this.logEndOffset - this.recoveryPoint
 
@@ -1381,13 +1405,18 @@ class Log(@volatile var dir: File,
         return
       debug(s"Flushing log up to offset $offset, last flushed: $lastFlushTime,  current time: ${time.milliseconds()}, " +
         s"unflushed: $unflushedMessages")
+      // offset就是上面的LEO
+      // 这里就是遍历LEO到recoveryPonint这两个范围之间所有的segment
+      // 然后执行flush操作
       for (segment <- logSegments(this.recoveryPoint, offset))
         segment.flush()
 
       lock synchronized {
         checkIfMemoryMappedBufferClosed()
+        // 更新recoveryPoint，直接将LEO赋值给他
         if (offset > this.recoveryPoint) {
           this.recoveryPoint = offset
+          // 记录刷盘时间
           lastFlushedTime.set(time.milliseconds)
         }
       }

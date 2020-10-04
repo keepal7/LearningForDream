@@ -175,11 +175,20 @@ class ReplicaManager(val config: KafkaConfig,
   /* epoch of the controller that last changed the leader */
   @volatile var controllerEpoch: Int = KafkaController.InitialControllerEpoch - 1
   private val localBrokerId = config.brokerId
+  // partition信息+logManager、高水位信息+replicaFetchManager、ISR列表信息
+  // 第一部分：目录组织机制、磁盘文件组织机制、数据文件+索引文件、数据格式、
+  // 顺序写磁盘文件、如何利用OS CACHE、定时刷新os cache(刷盘细节)
+  // logCleaner、定时清理磁盘文件
+
+
+  // 所有分区
   private val allPartitions = new Pool[TopicPartition, Partition](valueFactory = Some(tp =>
     new Partition(tp.topic, tp.partition, time, this)))
   private val replicaStateChangeLock = new Object
+  // 副本拉取
   val replicaFetcherManager = createReplicaFetcherManager(metrics, time, threadNamePrefix, quotaManagers.follower)
   val replicaAlterLogDirsManager = createReplicaAlterLogDirsManager(quotaManagers.alterLogDirs, brokerTopicStats)
+  // 高水位
   private val highWatermarkCheckPointThreadStarted = new AtomicBoolean(false)
   @volatile var highWatermarkCheckpoints = logManager.liveLogDirs.map(dir =>
     (dir.getAbsolutePath, new OffsetCheckpointFile(new File(dir, ReplicaManager.HighWatermarkFilename), logDirFailureChannel))).toMap
@@ -188,6 +197,9 @@ class ReplicaManager(val config: KafkaConfig,
   this.logIdent = s"[ReplicaManager broker=$localBrokerId] "
   private val stateChangeLogger = new StateChangeLogger(localBrokerId, inControllerContext = false, None)
 
+  // ISR列表 leader肯定是在这里面的
+  // follower不一定，只有follower跟上，才会再ISR里面
+  // 用于维护ISR列表的
   private val isrChangeSet: mutable.Set[TopicPartition] = new mutable.HashSet[TopicPartition]()
   private val lastIsrChangeMs = new AtomicLong(System.currentTimeMillis())
   private val lastIsrPropagationMs = new AtomicLong(System.currentTimeMillis())
@@ -204,13 +216,14 @@ class ReplicaManager(val config: KafkaConfig,
       handleLogDirFailure(newOfflineLogDir)
     }
   }
-
+  // 本地存储了多少个leader
   val leaderCount = newGauge(
     "LeaderCount",
     new Gauge[Int] {
       def value = leaderPartitionsIterator.size
     }
   )
+  // 本地存储了多少个partition
   val partitionCount = newGauge(
     "PartitionCount",
     new Gauge[Int] {
@@ -223,6 +236,7 @@ class ReplicaManager(val config: KafkaConfig,
       def value = offlinePartitionsIterator.size
     }
   )
+  // 副本数量不充足的partition
   val underReplicatedPartitions = newGauge(
     "UnderReplicatedPartitions",
     new Gauge[Int] {
@@ -235,7 +249,7 @@ class ReplicaManager(val config: KafkaConfig,
       def value = leaderPartitionsIterator.count(_.isUnderMinIsr)
     }
   )
-
+  // ISR列表扩张和伸缩的速率
   val isrExpandRate = newMeter("IsrExpandsPerSec", "expands", TimeUnit.SECONDS)
   val isrShrinkRate = newMeter("IsrShrinksPerSec", "shrinks", TimeUnit.SECONDS)
   val failedIsrUpdatesRate = newMeter("FailedIsrUpdatesPerSec", "failedUpdates", TimeUnit.SECONDS)
@@ -316,6 +330,7 @@ class ReplicaManager(val config: KafkaConfig,
     debug("Request key %s unblocked %d DeleteRecordsRequest.".format(key.keyLabel, completed))
   }
 
+  // 启动对应的线程，去负责维护ISR列表
   def startup() {
     // start ISR expiration thread
     // A follower can lag behind leader for up to config.replicaLagTimeMaxMs x 1.5 before it is removed from ISR
@@ -466,19 +481,22 @@ class ReplicaManager(val config: KafkaConfig,
                     processingStatsCallback: Map[TopicPartition, RecordsProcessingStats] => Unit = _ => ()) {
     if (isValidRequiredAcks(requiredAcks)) {
       val sTime = time.milliseconds
+      // 拿到本地文件的写入结果集
       val localProduceResults = appendToLocalLog(internalTopicsAllowed = internalTopicsAllowed,
         isFromClient = isFromClient, entriesPerPartition, requiredAcks)
       debug("Produce to local log in %d ms".format(time.milliseconds - sTime))
-
+      // 进行一个格式转换
+      // 转换为<topicPartition,ProducePartitionStatus<PartitionResponse>>
       val produceStatus = localProduceResults.map { case (topicPartition, result) =>
         topicPartition ->
                 ProducePartitionStatus(
                   result.info.lastOffset + 1, // required offset
                   new PartitionResponse(result.error, result.info.firstOffset, result.info.logAppendTime, result.info.logStartOffset)) // response status
       }
-
+      // 执行状态回调，主要是更新一些统计信息
       processingStatsCallback(localProduceResults.mapValues(_.info.recordsProcessingStats))
-
+      // 如果acks=-1的话，并且有数据写入，并且至少一个本地分区写成功了
+      // 那么就需要放入时间轮，进行一个延时等待的操作
       if (delayedProduceRequestRequired(requiredAcks, entriesPerPartition, localProduceResults)) {
         // create delayed produce operation
         val produceMetadata = ProduceMetadata(requiredAcks, produceStatus)
@@ -494,6 +512,7 @@ class ReplicaManager(val config: KafkaConfig,
 
       } else {
         // we can respond immediately
+        // 我们可以立即返回，就直接调用这个响应回调
         val produceResponseStatus = produceStatus.mapValues(status => status.responseStatus)
         responseCallback(produceResponseStatus)
       }
@@ -725,11 +744,13 @@ class ReplicaManager(val config: KafkaConfig,
                                entriesPerPartition: Map[TopicPartition, MemoryRecords],
                                requiredAcks: Short): Map[TopicPartition, LogAppendResult] = {
     trace(s"Append [$entriesPerPartition] to local log")
+    // 遍历entriesPerPartition
     entriesPerPartition.map { case (topicPartition, records) =>
       brokerTopicStats.topicStats(topicPartition.topic).totalProduceRequestRate.mark()
       brokerTopicStats.allTopicsStats.totalProduceRequestRate.mark()
 
       // reject appending to internal topics if it is not allowed
+      // 如果直接写内部topic，会被拒绝
       if (Topic.isInternal(topicPartition.topic) && !internalTopicsAllowed) {
         (topicPartition, LogAppendResult(
           LogAppendInfo.UnknownLogAppendInfo,
@@ -737,10 +758,12 @@ class ReplicaManager(val config: KafkaConfig,
       } else {
         try {
           val partitionOpt = getPartition(topicPartition)
+          // 这个info上下层进行文件写入的结果信息
           val info = partitionOpt match {
             case Some(partition) =>
               if (partition eq ReplicaManager.OfflinePartition)
                 throw new KafkaStorageException(s"Partition $topicPartition is in an offline log directory on broker $localBrokerId")
+              // 核心函数入口
               partition.appendRecordsToLeader(records, isFromClient, requiredAcks)
 
             case None => throw new UnknownTopicOrPartitionException("Partition %s doesn't exist on %d"
@@ -761,10 +784,12 @@ class ReplicaManager(val config: KafkaConfig,
 
           trace("%d bytes written to log %s-%d beginning at offset %d and ending at offset %d"
             .format(records.sizeInBytes, topicPartition.topic, topicPartition.partition, info.firstOffset, info.lastOffset))
+          // 每个分区对应提个结果信息
           (topicPartition, LogAppendResult(info))
         } catch {
           // NOTE: Failed produce requests metric is not incremented for known exceptions
           // it is supposed to indicate un-expected failures of a broker in handling a produce request
+          // 如果发生异常，则封装对应的异常信息后返回上册
           case e@ (_: UnknownTopicOrPartitionException |
                    _: NotLeaderForPartitionException |
                    _: RecordTooLargeException |

@@ -35,6 +35,7 @@ public class Producer extends Thread {
         props.put("client.id", "DemoProducer");
         props.put("key.serializer", "org.apache.kafka.common.serialization.IntegerSerializer");
         props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        props.put("acks","2");
         producer = new KafkaProducer<>(props);
         this.topic = topic;
         this.isAsync = isAsync;
@@ -42,7 +43,8 @@ public class Producer extends Thread {
 
     public void run() {
         int messageNo = 1;
-        while (true) {
+        boolean flag = true;
+        while (flag) {
             String messageStr = "Message_" + messageNo;
             long startTime = System.currentTimeMillis();
             if (isAsync) { // Send asynchronously
@@ -59,7 +61,9 @@ public class Producer extends Thread {
                     e.printStackTrace();
                 }
             }
-            ++messageNo;
+            if (++messageNo == 100){
+                flag = false;
+            }
         }
     }
 }
