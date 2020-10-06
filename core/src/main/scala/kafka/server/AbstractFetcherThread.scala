@@ -97,7 +97,12 @@ abstract class AbstractFetcherThread(name: String,
   private def states() = partitionStates.partitionStates.asScala.map { state => state.topicPartition -> state.value }
 
   override def doWork() {
+    // 发送leadEpoch请求，确认当前log是否需要被截断
     maybeTruncate()
+    // 构造fecthRequest
+    // 这里构造的请求，肯定是针对某一个Broker的
+    // 也就是这个fecther管理的这些partitions，他们的Leader都在同一个Broker上
+    // 所以，构造出来的这个fetchRequest是针对某个broker的
     val fetchRequest = inLock(partitionMapLock) {
       val ResultWithPartitions(fetchRequest, partitionsWithError) = buildFetchRequest(states)
       if (fetchRequest.isEmpty) {
@@ -107,6 +112,7 @@ abstract class AbstractFetcherThread(name: String,
       handlePartitionsWithErrors(partitionsWithError)
       fetchRequest
     }
+    // 处理fetchRequest
     if (!fetchRequest.isEmpty)
       processFetchRequest(fetchRequest)
   }
@@ -143,6 +149,7 @@ abstract class AbstractFetcherThread(name: String,
 
     try {
       trace(s"Sending fetch request $fetchRequest")
+      // 阻塞拿到每个分区对应的数据
       responseData = fetch(fetchRequest)
     } catch {
       case t: Throwable =>
@@ -162,7 +169,7 @@ abstract class AbstractFetcherThread(name: String,
     if (responseData.nonEmpty) {
       // process fetched data
       inLock(partitionMapLock) {
-
+        // 遍历
         responseData.foreach { case (topicPartition, partitionData) =>
           val topic = topicPartition.topic
           val partitionId = topicPartition.partition
@@ -180,6 +187,7 @@ abstract class AbstractFetcherThread(name: String,
 
                     fetcherLagStats.getAndMaybePut(topic, partitionId).lag = Math.max(0L, partitionData.highWatermark - newOffset)
                     // Once we hand off the partition data to the subclass, we can't mess with it any more in this thread
+                    // 交给子类去处理对应的响应数据
                     processPartitionData(topicPartition, currentPartitionFetchState.fetchOffset, partitionData)
 
                     val validBytes = records.validBytes
@@ -231,7 +239,7 @@ abstract class AbstractFetcherThread(name: String,
         }
       }
     }
-
+    // 如果有的分区存在异常，则进行处理
     if (partitionsWithError.nonEmpty) {
       debug(s"Handling errors for partitions $partitionsWithError")
       handlePartitionsWithErrors(partitionsWithError)

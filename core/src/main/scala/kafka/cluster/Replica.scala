@@ -73,11 +73,16 @@ class Replica(val brokerId: Int,
    * high frequency.
    */
   def updateLogReadResult(logReadResult: LogReadResult) {
+    // 这次fetch请求发过来的当前followerLEO >= curLeaderLEO,则更新 _lastCaughtUpTimeMs为此次的fetchTimeMs
     if (logReadResult.info.fetchOffsetMetadata.messageOffset >= logReadResult.leaderLogEndOffset)
       _lastCaughtUpTimeMs = math.max(_lastCaughtUpTimeMs, logReadResult.fetchTimeMs)
+    // 或者 这次fetch请求发过来的当前followerLEO >= preLeaderLEO,则更新 _lastCaughtUpTimeMs为上次的fetchTimeMs
     else if (logReadResult.info.fetchOffsetMetadata.messageOffset >= lastFetchLeaderLogEndOffset)
       _lastCaughtUpTimeMs = math.max(_lastCaughtUpTimeMs, lastFetchTimeMs)
+    // 总而言之，这个_lastCaughtUpTimeMs是在follower的LEO追上Leader的LEO的时候才会更新
 
+    // 更新各个状态，其中最重要的是，更新当前副本的LEO信息
+    //  LEO信息，来源于FETCH请求中带有的Fetch_offset字段
     logStartOffset = logReadResult.followerLogStartOffset
     logEndOffset = logReadResult.info.fetchOffsetMetadata
     lastFetchLeaderLogEndOffset = logReadResult.leaderLogEndOffset

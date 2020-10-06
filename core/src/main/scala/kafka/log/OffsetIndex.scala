@@ -90,6 +90,7 @@ class OffsetIndex(_file: File, baseOffset: Long, maxIndexSize: Int = -1, writabl
       if(slot == -1)
         OffsetPosition(baseOffset, 0)
       else
+        // 转换数据结构：<offset,position>
         parseEntry(idx, slot).asInstanceOf[OffsetPosition]
     }
   }

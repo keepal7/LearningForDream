@@ -21,6 +21,10 @@ import kafka.cluster.BrokerEndPoint
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.utils.Time
 
+/**
+  * 基本上，就是为一批followers创建对应的Fetcher线程
+  * 主要的逻辑都在他的父类AbstractFetcherManager中
+  */
 class ReplicaFetcherManager(brokerConfig: KafkaConfig, protected val replicaManager: ReplicaManager, metrics: Metrics,
                             time: Time, threadNamePrefix: Option[String] = None, quotaManager: ReplicationQuotaManager)
       extends AbstractFetcherManager("ReplicaFetcherManager on broker " + brokerConfig.brokerId,
@@ -28,7 +32,10 @@ class ReplicaFetcherManager(brokerConfig: KafkaConfig, protected val replicaMana
 
   override def createFetcherThread(fetcherId: Int, sourceBroker: BrokerEndPoint): AbstractFetcherThread = {
     val prefix = threadNamePrefix.map(tp => s"${tp}:").getOrElse("")
+    // 拉取线程的名称，可以成为问题排查的入口
     val threadName = s"${prefix}ReplicaFetcherThread-$fetcherId-${sourceBroker.id}"
+    // 创建对应的线程，实际上的run函数，在它的超类中，即
+    // ShutdownableThread 中
     new ReplicaFetcherThread(threadName, fetcherId, sourceBroker, brokerConfig, replicaManager, metrics, time, quotaManager)
   }
 

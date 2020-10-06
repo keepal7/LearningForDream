@@ -390,6 +390,7 @@ public class FetchRequest extends AbstractRequest {
                 int maxBytes = partitionResponse.getInt(MAX_BYTES_KEY_NAME);
                 long logStartOffset = partitionResponse.hasField(LOG_START_OFFSET_KEY_NAME) ?
                     partitionResponse.getLong(LOG_START_OFFSET_KEY_NAME) : INVALID_LOG_START_OFFSET;
+                // 每个分区从哪儿开始拉，当前请求最多拉取10MB
                 PartitionData partitionData = new PartitionData(offset, logStartOffset, maxBytes);
                 fetchData.put(new TopicPartition(topic, partition), partitionData);
             }

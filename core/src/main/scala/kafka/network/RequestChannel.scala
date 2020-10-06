@@ -295,10 +295,11 @@ class RequestChannel(val queueSize: Int) extends KafkaMetricsGroup {
       }
       trace(message)
     }
-
+    // 通过processors引用，拿到processor
     val processor = processors.get(response.processor)
     // The processor may be null if it was shutdown. In this case, the connections
     // are closed, so the response is dropped.
+    // 然后把响应放入其响应队列中
     if (processor != null) {
       processor.enqueueResponse(response)
     }

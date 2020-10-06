@@ -590,7 +590,7 @@ class KafkaApis(val requestChannel: RequestChannel,
 
         trace(s"Sending Fetch response with partitions.size=${unconvertedFetchResponse.responseData().size()}, " +
           s"metadata=${unconvertedFetchResponse.sessionId()}")
-
+        //  如果是follower的fetch请求
         if (fetchRequest.isFromFollower)
           sendResponseExemptThrottle(request, createResponse(0))
         else
@@ -620,6 +620,11 @@ class KafkaApis(val requestChannel: RequestChannel,
       processResponseCallback(Seq.empty)
     else {
       // call the replica manager to fetch messages from the local replica
+      // 1、先尝试从本地磁盘文件中读取指定offset之后的数据，replicaManager来进行拉取
+      // 2、如果能读取到，那么就通过一个回调函数返回回去
+      // 3、接着判断下，是否需要更新一下HW，或者维护一下ISR
+      // 4、如果没有数据的话，就放入时间轮，等待指定的时间
+      // 5、在此期间，如果写入了新的数据，那么就唤醒时间轮中的FetchRequest来进行数据拉取
       replicaManager.fetchMessages(
         fetchRequest.maxWait.toLong,
         fetchRequest.replicaId,

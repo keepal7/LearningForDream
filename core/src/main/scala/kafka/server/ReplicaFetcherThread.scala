@@ -109,16 +109,19 @@ class ReplicaFetcherThread(name: String,
         .format(replica.logEndOffset.messageOffset, topicPartition, records.sizeInBytes, partitionData.highWatermark))
 
     // Append the leader's messages to the log
+    // 将从leader拉取的数据，写入follower的log中
     partition.appendRecordsToFollower(records)
 
     if (isTraceEnabled)
       trace("Follower has replica log end offset %d after appending %d bytes of messages for partition %s"
         .format(replica.logEndOffset.messageOffset, records.sizeInBytes, topicPartition))
+    // 计算follower的hw值：取min(leo,leaderHW)
     val followerHighWatermark = replica.logEndOffset.messageOffset.min(partitionData.highWatermark)
     val leaderLogStartOffset = partitionData.logStartOffset
     // for the follower replica, we do not need to keep
     // its segment base offset the physical position,
     // these values will be computed upon making the leader
+    // 更新高水位值
     replica.highWatermark = new LogOffsetMetadata(followerHighWatermark)
     replica.maybeIncrementLogStartOffset(leaderLogStartOffset)
     if (isTraceEnabled)
@@ -217,11 +220,14 @@ class ReplicaFetcherThread(name: String,
 
   protected def fetch(fetchRequest: FetchRequest): Seq[(TopicPartition, PartitionData)] = {
     try {
+      // 通过netWorkClient发送一个阻塞请求
       val clientResponse = leaderEndpoint.sendRequest(fetchRequest.underlying)
+      // 拿到响应
       val fetchResponse = clientResponse.responseBody.asInstanceOf[FetchResponse]
       if (!fetchSessionHandler.handleResponse(fetchResponse)) {
         Nil
       } else {
+        // 转换成一个map<tp,PartitionData>
         fetchResponse.responseData.asScala.toSeq.map { case (key, value) =>
           key -> new PartitionData(value)
         }
@@ -275,6 +281,10 @@ class ReplicaFetcherThread(name: String,
     }
 
     val fetchData = builder.build()
+    // 传入关键参数，构造请求
+    // maxBytes：当前每个分区最多能拉取多少数据，默认当前请求只能拉取10MB
+    // minBytes：最少要拉取到多少数据才返回，默认1KB
+    // maxWait：如果一直拉不到数据，需要阻塞等待多长时间，默认500ms
     val requestBuilder = JFetchRequest.Builder.
       forReplica(fetchRequestVersion, replicaId, maxWait, minBytes, fetchData.toSend())
         .setMaxBytes(maxBytes)

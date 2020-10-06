@@ -194,7 +194,9 @@ class LogSegment private[log] (val log: FileRecords,
    */
   @threadsafe
   private[log] def translateOffset(offset: Long, startingFilePosition: Int = 0): LogOffsetPosition = {
+    // 二分查找，找到对应数据所在的信息
     val mapping = offsetIndex.lookup(offset)
+    // 返回这个position的batch的信息
     log.searchForOffsetWithSize(offset, max(mapping.position, startingFilePosition))
   }
 
@@ -218,6 +220,8 @@ class LogSegment private[log] (val log: FileRecords,
       throw new IllegalArgumentException("Invalid max size for log read (%d)".format(maxSize))
 
     val logSize = log.sizeInBytes // this may change, need to save a consistent copy
+    // 根据稀疏索引来确定具体的position，然后从这儿开始读取
+    // 具体是拿到了那个batch数据的整体信息：offset/position/size等
     val startOffsetAndSize = translateOffset(startOffset)
 
     // if the start position is already off the end of the log, return null
@@ -255,7 +259,9 @@ class LogSegment private[log] (val log: FileRecords,
             mapping.position
         min(min(maxPosition, endPosition) - startPosition, adjustedMaxSize).toInt
     }
-
+    // 上边计算出来了开始位置，以及需要拉取的size
+    // 这里通过log.read读取对应的数据
+    // 最后封装成FetchDataInfo返回
     FetchDataInfo(offsetMetadata, log.read(startPosition, fetchSize),
       firstEntryIncomplete = adjustedMaxSize < startOffsetAndSize.size)
   }

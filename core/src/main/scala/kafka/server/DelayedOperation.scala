@@ -234,6 +234,8 @@ final class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: Stri
       return true
 
     var watchCreated = false
+    // 将对应的<tp:delayed>放入观察者中
+    // 等待在对应的leader有数据以后，就感知到
     for(key <- watchKeys) {
       // If the operation is already completed, stop adding it to the rest of the watcher list.
       if (operation.isCompleted)

@@ -999,7 +999,7 @@ class Log(@volatile var dir: File,
         return FetchDataInfo(currentNextOffsetMetadata, MemoryRecords.EMPTY, firstEntryIncomplete = false,
           abortedTransactions = abortedTransactions)
       }
-
+      // 根据startOffset判断，得到具体的segmentEntry
       var segmentEntry = segments.floorEntry(startOffset)
 
       // return error on attempt to read beyond the log end offset or read below log start offset
@@ -1029,6 +1029,7 @@ class Log(@volatile var dir: File,
             segment.size
           }
         }
+        // 通过segment来进行读取
         val fetchInfo = segment.read(startOffset, maxOffset, maxLength, maxPosition, minOneMessage)
         if (fetchInfo == null) {
           segmentEntry = segments.higherEntry(segmentEntry.getKey)
