@@ -110,6 +110,7 @@ class ControllerChannelManager(controllerContext: ControllerContext, config: Kaf
     debug(s"Controller ${config.brokerId} trying to connect to broker ${broker.id}")
     val brokerNode = broker.node(config.interBrokerListenerName)
     val logContext = new LogContext(s"[Controller id=${config.brokerId}, targetBrokerId=${brokerNode.idString}] ")
+    // 网络模块的初始化
     val networkClient = {
       val channelBuilder = ChannelBuilders.clientChannelBuilder(
         config.interBrokerSecurityProtocol,
@@ -150,7 +151,7 @@ class ControllerChannelManager(controllerContext: ControllerContext, config: Kaf
       case None => s"Controller-${config.brokerId}-to-broker-${broker.id}-send-thread"
       case Some(name) => s"$name:Controller-${config.brokerId}-to-broker-${broker.id}-send-thread"
     }
-
+    // 将初始化好的网络模块，引用放入对应的请求处理线程中
     val requestThread = new RequestSendThread(config.brokerId, controllerContext, messageQueue, networkClient,
       brokerNode, config, time, stateChangeLogger, threadName)
     requestThread.setDaemon(false)
@@ -162,7 +163,8 @@ class ControllerChannelManager(controllerContext: ControllerContext, config: Kaf
       },
       queueSizeTags(broker.id)
     )
-
+    // 将对应的networkClient、requestThread和brokerInfo封装成BrokerStateInfo
+    // 然后缓存在controller的map<brokerId,BrokerStateInfo>中，供后续使用
     brokerStateInfo.put(broker.id, new ControllerBrokerStateInfo(networkClient, brokerNode, messageQueue,
       requestThread, queueSizeGauge))
   }

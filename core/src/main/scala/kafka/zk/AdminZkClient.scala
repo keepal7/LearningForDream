@@ -51,8 +51,11 @@ class AdminZkClient(zkClient: KafkaZkClient) extends Logging {
                   replicationFactor: Int,
                   topicConfig: Properties = new Properties,
                   rackAwareMode: RackAwareMode = RackAwareMode.Enforced) {
+    // 获取元数据
     val brokerMetadatas = getBrokerMetadatas(rackAwareMode)
+    // 内部算法，进行分配
     val replicaAssignment = AdminUtils.assignReplicasToBrokers(brokerMetadatas, partitions, replicationFactor)
+    // 传入topicName，分配方案，topic配置信息，进行创建
     createOrUpdateTopicPartitionAssignmentPathInZK(topic, replicaAssignment, topicConfig)
   }
 
@@ -64,6 +67,7 @@ class AdminZkClient(zkClient: KafkaZkClient) extends Logging {
    */
   def getBrokerMetadatas(rackAwareMode: RackAwareMode = RackAwareMode.Enforced,
                          brokerList: Option[Seq[Int]] = None): Seq[BrokerMetadata] = {
+    // 从zk中获取元数据
     val allBrokers = zkClient.getAllBrokersInCluster
     val brokers = brokerList.map(brokerIds => allBrokers.filter(b => brokerIds.contains(b.id))).getOrElse(allBrokers)
     val brokersWithRack = brokers.filter(_.rack.nonEmpty)
@@ -91,11 +95,13 @@ class AdminZkClient(zkClient: KafkaZkClient) extends Logging {
                                                      partitionReplicaAssignment: Map[Int, Seq[Int]],
                                                      config: Properties = new Properties,
                                                      update: Boolean = false) {
+    // 校验
     validateCreateOrUpdateTopic(topic, partitionReplicaAssignment, config, update)
 
     // Configs only matter if a topic is being created. Changing configs via AlterTopic is not supported
     if (!update) {
       // write out the config if there is any, this isn't transactional with the partition assignments
+      // 去对应的config目录下写入对应的节点和数据
       zkClient.setOrCreateEntityConfigs(ConfigType.Topic, topic, config)
     }
 
@@ -124,6 +130,7 @@ class AdminZkClient(zkClient: KafkaZkClient) extends Logging {
         val allTopics = zkClient.getAllTopicsInCluster
         // check again in case the topic was created in the meantime, otherwise the
         // topic could potentially collide with itself
+        // 不允许重复，如果重复直接抛异常，中断此次请求
         if (allTopics.contains(topic))
           throw new TopicExistsException(s"Topic '$topic' already exists.")
         val collidingTopics = allTopics.filter(Topic.hasCollision(topic, _))
@@ -149,9 +156,10 @@ class AdminZkClient(zkClient: KafkaZkClient) extends Logging {
   private def writeTopicPartitionAssignment(topic: String, replicaAssignment: Map[Int, Seq[Int]], update: Boolean) {
     try {
       val assignment = replicaAssignment.map { case (partitionId, replicas) => (new TopicPartition(topic,partitionId), replicas) }.toMap
-
+      // 如果不是更新，那便是创建
       if (!update) {
         info("Topic creation " + assignment)
+        // 在brokers/topics/下创建topic节点，并将分区分配策略写到节点数据中
         zkClient.createTopicAssignment(topic, assignment)
       } else {
         info("Topic update " + assignment)

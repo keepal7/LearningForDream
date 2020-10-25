@@ -182,13 +182,16 @@ class MetadataCache(brokerId: Int) extends Logging {
 
   // This method returns the deleted TopicPartitions received from UpdateMetadataRequest
   def updateCache(correlationId: Int, updateMetadataRequest: UpdateMetadataRequest): Seq[TopicPartition] = {
+    // 加锁，解决并发和可见性的问题（所以元数据还是一个操作量级比较重的操作）
     inWriteLock(partitionMetadataLock) {
       controllerId = updateMetadataRequest.controllerId match {
           case id if id < 0 => None
           case id => Some(id)
         }
+      // 清空原有的元数据信息
       aliveNodes.clear()
       aliveBrokers.clear()
+      // 然后从请求中取出最新的数据，进行更新
       updateMetadataRequest.liveBrokers.asScala.foreach { broker =>
         // `aliveNodes` is a hot path for metadata requests for large clusters, so we use java.util.HashMap which
         // is a bit faster than scala.collection.mutable.HashMap. When we drop support for Scala 2.10, we could
@@ -207,7 +210,7 @@ class MetadataCache(brokerId: Int) extends Logging {
         if (!aliveNodes.values.forall(_.keySet == listeners))
           error(s"Listeners are not identical across brokers: $aliveNodes")
       }
-
+      //  计算deletedPartititons
       val deletedPartitions = new mutable.ArrayBuffer[TopicPartition]
       updateMetadataRequest.partitionStates.asScala.foreach { case (tp, info) =>
         val controllerId = updateMetadataRequest.controllerId

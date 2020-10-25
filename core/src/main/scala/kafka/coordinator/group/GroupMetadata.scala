@@ -203,7 +203,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
     assert(groupId == member.groupId)
     assert(this.protocolType.orNull == member.protocolType)
     assert(supportsProtocols(member.protocols))
-
+    // coordinator选举leader很简单，就第发送join_group请求的那个member
     if (leaderId.isEmpty)
       leaderId = Some(member.memberId)
     members.put(member.memberId, member)

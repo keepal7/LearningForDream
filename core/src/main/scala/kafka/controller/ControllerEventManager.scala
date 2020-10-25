@@ -59,6 +59,7 @@ class ControllerEventManager(controllerId: Int, rateAndTimeMetrics: Map[Controll
     logIdent = s"[ControllerEventThread controllerId=$controllerId] "
 
     override def doWork(): Unit = {
+      // 从阻塞队列中取出controllerEvent
       queue.take() match {
         case KafkaController.ShutdownEventThread => initiateShutdown()
         case controllerEvent =>
@@ -66,6 +67,7 @@ class ControllerEventManager(controllerId: Int, rateAndTimeMetrics: Map[Controll
 
           try {
             rateAndTimeMetrics(state).time {
+              // 通过策略模式，执行其子类实现
               controllerEvent.process()
             }
           } catch {

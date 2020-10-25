@@ -209,6 +209,7 @@ object ReassignPartitionsCommand extends Logging {
       println("There is an existing assignment running.")
       reassignPartitionsCommand.maybeLimit(throttle)
     } else {
+      // 打印当前的分配方案
       printCurrentAssignment(zkClient, partitionAssignment.map(_._1.topic))
       if (throttle.interBrokerLimit >= 0 || throttle.replicaAlterLogDirsLimit >= 0)
         println(String.format("Warning: You must run Verify periodically, until the reassignment completes, to ensure the throttle is removed. You can also alter the throttle by rerunning the Execute command passing a new value."))
@@ -592,6 +593,9 @@ class ReassignPartitionsCommand(zkClient: KafkaZkClient,
           alterReplicaLogDirsIgnoreReplicaNotAvailable(proposedReplicaAssignment, adminClientOpt.get, timeoutMs)
 
         // Create reassignment znode so that controller will send LeaderAndIsrRequest to create replica in the broker
+        // 在zk上创建节点：/admin/reassign_partitions
+        // 并将最新的分配方案写到该节点中
+        // 等待controller的触发器，然后去执行对应的handler
         zkClient.createPartitionReassignment(validPartitions.map({case (key, value) => (new TopicPartition(key.topic, key.partition), value)}).toMap)
 
         // Send AlterReplicaLogDirsRequest again to make sure broker will start to move replica to the specified log directory.

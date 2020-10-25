@@ -80,7 +80,9 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
   }
 
   def registerBrokerInZk(brokerInfo: BrokerInfo): Unit = {
+    // path: /brokers/ids/id
     val path = brokerInfo.path
+    // 创建该临时节点，然后写入节点数据
     checkedEphemeralCreate(path, brokerInfo.toJsonBytes)
     info(s"Registered broker ${brokerInfo.broker.id} at path $path with addresses: ${brokerInfo.broker.endPoints}")
   }
@@ -385,6 +387,7 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
    * @throws KeeperException if there is an error while creating assignment
    */
   def createTopicAssignment(topic: String, assignment: Map[TopicPartition, Seq[Int]]) = {
+    // 在brokers/topics/下创建topic节点，并将分区分配策略写到节点数据中
     createRecursive(TopicZNode.path(topic), TopicZNode.encode(assignment))
   }
 
@@ -455,6 +458,8 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
       val topic = getDataResponse.ctx.get.asInstanceOf[String]
       getDataResponse.resultCode match {
         case Code.OK => TopicZNode.decode(topic, getDataResponse.data)
+        // 这里的数据结构，相当于 topic-partition0 -> [0,1,2]
+        // 也就是拿到各个分区在当前集群的分布情况
         case Code.NONODE => Map.empty[TopicPartition, Seq[Int]]
         case _ => throw getDataResponse.resultException.get
       }

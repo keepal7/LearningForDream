@@ -103,6 +103,7 @@ class PartitionStateMachine(config: KafkaConfig,
       !topicDeletionManager.isTopicQueuedUpForDeletion(partition.topic) &&
         (partitionState.equals(OfflinePartition) || partitionState.equals(NewPartition))
     }.keys.toSeq
+    // 入口
     handleStateChanges(partitionsToTrigger, OnlinePartition, Option(OfflinePartitionLeaderElectionStrategy))
     // TODO: If handleStateChanges catches an exception, it is not enough to bail out and log an error.
     // It is important to trigger leader election for those partitions.
@@ -171,7 +172,9 @@ class PartitionStateMachine(config: KafkaConfig,
             partitionState.put(partition, OnlinePartition)
           }
         }
+        // 如果由online 变成了 offLine
         if (partitionsToElectLeader.nonEmpty) {
+          // 执行选举，并将结果写入state，再发送到对应broker上
           val successfulElections = electLeaderForPartitions(partitionsToElectLeader, partitionLeaderElectionStrategyOpt.get)
           successfulElections.foreach { partition =>
             stateChangeLog.trace(s"Changed partition $partition from ${partitionState(partition)} to $targetState with state " +

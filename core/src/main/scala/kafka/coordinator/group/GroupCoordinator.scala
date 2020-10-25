@@ -124,12 +124,14 @@ class GroupCoordinator(val brokerId: Int,
       // only try to create the group if the group is not unknown AND
       // the member id is UNKNOWN, if member is specified but group does not
       // exist we should reject the request
+      // 如果group都还不存在，就有了memberId,则认为是非法请求，直接拒绝。
       groupManager.getGroup(groupId) match {
         case None =>
           if (memberId != JoinGroupRequest.UNKNOWN_MEMBER_ID) {
             responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))
           } else {
             val group = groupManager.addGroup(new GroupMetadata(groupId, initialState = Empty))
+            // 执行具体的加组操作
             doJoinGroup(group, memberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
           }
 
@@ -266,7 +268,8 @@ class GroupCoordinator(val brokerId: Int,
 
           case PreparingRebalance =>
             responseCallback(Array.empty, Errors.REBALANCE_IN_PROGRESS)
-
+          // 只有group处于compeletingRebalance状态下才会被处理
+          // 其余状态都是错误的状态
           case CompletingRebalance =>
             group.get(memberId).awaitingSyncCallback = responseCallback
 
@@ -437,7 +440,9 @@ class GroupCoordinator(val brokerId: Int,
                   responseCallback(Errors.ILLEGAL_GENERATION)
                 } else {
                   val member = group.get(memberId)
+                  // 完成上次的延时，新建新的延时任务
                   completeAndScheduleNextHeartbeatExpiration(group, member)
+                  // 回调响应
                   responseCallback(Errors.NONE)
                 }
             }
@@ -629,7 +634,9 @@ class GroupCoordinator(val brokerId: Int,
 
   private def setAndPropagateAssignment(group: GroupMetadata, assignment: Map[String, Array[Byte]]) {
     assert(group.is(CompletingRebalance))
+    // 给每个member的分配方案赋值
     group.allMemberMetadata.foreach(member => member.assignment = assignment(member.memberId))
+    // 在整个group中传播这个分配方案
     propagateAssignment(group, Errors.NONE)
   }
 
@@ -640,8 +647,10 @@ class GroupCoordinator(val brokerId: Int,
   }
 
   private def propagateAssignment(group: GroupMetadata, error: Errors) {
+    // 遍历
     for (member <- group.allMemberMetadata) {
       if (member.awaitingSyncCallback != null) {
+        // 通过回调告诉member对应的分配方案
         member.awaitingSyncCallback(member.assignment, error)
         member.awaitingSyncCallback = null
 
@@ -675,9 +684,12 @@ class GroupCoordinator(val brokerId: Int,
     // complete current heartbeat expectation
     member.latestHeartbeat = time.milliseconds()
     val memberKey = MemberKey(member.groupId, member.memberId)
+    // 完成上次的延时任务
     heartbeatPurgatory.checkAndComplete(memberKey)
 
     // reschedule the next heartbeat expiration deadline
+    // 服务端能拿到这个session.timeout,然后根据这个时间生成一个延时任务，
+    // 例如30s，如果这么长时间么有收到心跳请求，则认为消费者出了问题，就踢掉以后执行rebalance。
     val newHeartbeatDeadline = member.latestHeartbeat + member.sessionTimeoutMs
     val delayedHeartbeat = new DelayedHeartbeat(this, group, member, newHeartbeatDeadline, member.sessionTimeoutMs)
     heartbeatPurgatory.tryCompleteElseWatch(delayedHeartbeat, Seq(memberKey))
@@ -697,14 +709,16 @@ class GroupCoordinator(val brokerId: Int,
                                     protocols: List[(String, Array[Byte])],
                                     group: GroupMetadata,
                                     callback: JoinCallback) = {
+    // 根据clientID初始化memberID
     val memberId = clientId + "-" + group.generateMemberIdSuffix
+    // 封装一个member对象
     val member = new MemberMetadata(memberId, group.groupId, clientId, clientHost, rebalanceTimeoutMs,
       sessionTimeoutMs, protocolType, protocols)
     member.awaitingJoinCallback = callback
     // update the newMemberAdded flag to indicate that the join group can be further delayed
     if (group.is(PreparingRebalance) && group.generationId == 0)
       group.newMemberAdded = true
-
+    // 增加成员到group中
     group.add(member)
     maybePrepareRebalance(group)
     member
@@ -742,7 +756,7 @@ class GroupCoordinator(val brokerId: Int,
       new DelayedJoin(this, group, group.rebalanceTimeoutMs)
 
     group.transitionTo(PreparingRebalance)
-
+    // rebalance开始标志日志
     info(s"Preparing to rebalance group ${group.groupId} with old generation ${group.generationId} " +
       s"(${Topic.GROUP_METADATA_TOPIC_NAME}-${partitionFor(group.groupId)})")
 
@@ -794,6 +808,7 @@ class GroupCoordinator(val brokerId: Int,
             }
           })
         } else {
+          // rebalance标志结束日志
           info(s"Stabilized group ${group.groupId} generation ${group.generationId} " +
             s"(${Topic.GROUP_METADATA_TOPIC_NAME}-${partitionFor(group.groupId)})")
 

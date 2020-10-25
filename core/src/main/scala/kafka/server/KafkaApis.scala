@@ -223,6 +223,8 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     if (authorize(request.session, ClusterAction, Resource.ClusterResource)) {
       val deletedPartitions = replicaManager.maybeUpdateMetadataCache(correlationId, updateMetadataRequest)
+      // 看下这个broker下管理的消费组，消费的partition是不是有被删除的
+      // 如果有的话，就有执行对应的handler
       if (deletedPartitions.nonEmpty)
         groupCoordinator.handleDeletedPartitions(deletedPartitions)
 
@@ -231,6 +233,7 @@ class KafkaApis(val requestChannel: RequestChannel,
           adminManager.tryCompleteDelayedTopicOperations(topic)
         }
       }
+      // 响应
       sendResponseExemptThrottle(request, new UpdateMetadataResponse(Errors.NONE))
     } else {
       sendResponseMaybeThrottle(request, _ => new UpdateMetadataResponse(Errors.CLUSTER_AUTHORIZATION_FAILED))
@@ -1202,6 +1205,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     val joinGroupRequest = request.body[JoinGroupRequest]
 
     // the callback for sending a join-group response
+    // 响应回调。在响应的时候，会带上对应的leaderID
     def sendResponseCallback(joinResult: JoinGroupResult) {
       val members = joinResult.members map { case (memberId, metadataArray) => (memberId, ByteBuffer.wrap(metadataArray)) }
       def createResponse(requestThrottleMs: Int): AbstractResponse = {
@@ -1214,7 +1218,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
       sendResponseMaybeThrottle(request, createResponse)
     }
-
+    // 鉴权
     if (!authorize(request.session, Read, new Resource(Group, joinGroupRequest.groupId()))) {
       sendResponseMaybeThrottle(request, requestThrottleMs =>
         new JoinGroupResponse(
@@ -1230,6 +1234,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       // let the coordinator to handle join-group
       val protocols = joinGroupRequest.groupProtocols().asScala.map(protocol =>
         (protocol.name, Utils.toArray(protocol.metadata))).toList
+      // 由groupCoordinator组件进行逻辑处理
       groupCoordinator.handleJoinGroup(
         joinGroupRequest.groupId,
         joinGroupRequest.memberId,
@@ -1371,6 +1376,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       sendResponseMaybeThrottle(request, createResponse)
     }
 
+    // 如果当前节点不是controller，则不让执行这个请求
     if (!controller.isActive) {
       val results = createTopicsRequest.topics.asScala.map { case (topic, _) =>
         (topic, new ApiError(Errors.NOT_CONTROLLER, null))
@@ -1382,6 +1388,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
       sendResponseCallback(results)
     } else {
+      // 从request中获取topics信息
       val (validTopics, duplicateTopics) = createTopicsRequest.topics.asScala.partition { case (topic, _) =>
         !createTopicsRequest.duplicateTopics.contains(topic)
       }
@@ -1402,7 +1409,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         val completeResults = results ++ duplicatedTopicsResults
         sendResponseCallback(completeResults)
       }
-
+      // 通过adminManager进行创建
       adminManager.createTopics(
         createTopicsRequest.timeout,
         createTopicsRequest.validateOnly,

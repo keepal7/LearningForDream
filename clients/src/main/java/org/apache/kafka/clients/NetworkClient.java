@@ -734,6 +734,8 @@ public class NetworkClient implements KafkaClient {
             processDisconnection(responses, node, now, entry.getValue());
         }
         // we got a disconnect so we should probably refresh our metadata and see if that broker is dead
+        // 在我们感知到有连接断开的时候，就会强制更新元数据
+        // 而不是说感知到了什么具体的异常的时候，会去更新元数据。
         if (this.selector.disconnected().size() > 0)
             metadataUpdater.requestUpdate();
     }

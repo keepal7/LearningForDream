@@ -198,6 +198,8 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
             if (log.isDebugEnabled()) {
                 log.debug("Sending {} {} to broker {}", isolationLevel, data.toString(), fetchTarget);
             }
+            // 通过networkClient对指定节点拉取数据
+            // 然后放入completedFetches中
             client.send(fetchTarget, request)
                     .addListener(new RequestFutureListener<ClientResponse>() {
                         @Override
@@ -821,6 +823,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         Cluster cluster = metadata.fetch();
         Map<Node, FetchSessionHandler.Builder> fetchable = new LinkedHashMap<>();
         for (TopicPartition partition : fetchablePartitions()) {
+            // 找到该分区对应的leader节点
             Node node = cluster.leaderFor(partition);
             if (node == null) {
                 metadata.requestUpdate();
@@ -836,7 +839,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                     builder = handler.newBuilder();
                     fetchable.put(node, builder);
                 }
-
+                // 确定拉取数据的位置
                 long position = this.subscriptions.position(partition);
                 builder.add(partition, new FetchRequest.PartitionData(position, FetchRequest.INVALID_LOG_START_OFFSET,
                     this.fetchSize));
@@ -1136,6 +1139,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                     // use the last record to do deserialization again.
                     if (cachedRecordException == null) {
                         corruptLastRecord = true;
+                        //
                         lastRecord = nextFetchedRecord();
                         corruptLastRecord = false;
                     }

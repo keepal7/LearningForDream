@@ -78,6 +78,7 @@ class AdminManager(val config: KafkaConfig,
 
     // 1. map over topics creating assignment and calling zookeeper
     val brokers = metadataCache.getAliveBrokers.map { b => kafka.admin.BrokerMetadata(b.id, b.rack) }
+    // 遍历
     val metadata = createInfo.map { case (topic, arguments) =>
       try {
         val configs = new Properties()
@@ -104,6 +105,7 @@ class AdminManager(val config: KafkaConfig,
 
         createTopicPolicy match {
           case Some(policy) =>
+            // 校验
             adminZkClient.validateCreateOrUpdateTopic(topic, assignments, configs, update = false)
 
             // Use `null` for unset fields in the public API
@@ -115,7 +117,7 @@ class AdminManager(val config: KafkaConfig,
 
             policy.validate(new RequestMetadata(topic, numPartitions, replicationFactor, replicaAssignments,
               arguments.configs))
-
+            // 如果不仅仅是校验的话，就执行创建
             if (!validateOnly)
               adminZkClient.createOrUpdateTopicPartitionAssignmentPathInZK(topic, assignments, configs, update = false)
 

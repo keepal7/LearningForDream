@@ -246,11 +246,13 @@ public abstract class AbstractCoordinator implements Closeable {
     protected synchronized RequestFuture<Void> lookupCoordinator() {
         if (findCoordinatorFuture == null) {
             // find a node to ask about the coordinator
+            // 选择负载最低的那个节点
             Node node = this.client.leastLoadedNode();
             if (node == null) {
                 log.debug("No broker available to send FindCoordinator request");
                 return RequestFuture.noBrokersAvailable();
             } else
+                // 发送查找coordinator的请求
                 findCoordinatorFuture = sendFindCoordinatorRequest(node);
         }
         return findCoordinatorFuture;
@@ -448,6 +450,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 metadata()).setRebalanceTimeout(this.rebalanceTimeoutMs);
 
         log.debug("Sending JoinGroup ({}) to coordinator {}", requestBuilder, this.coordinator);
+        // 将Future<clientResponse>转换成了RequestFuture<ByteBuffer>
         return client.send(coordinator, requestBuilder)
                 .compose(new JoinGroupResponseHandler());
     }
@@ -468,6 +471,7 @@ public abstract class AbstractCoordinator implements Closeable {
                     } else {
                         AbstractCoordinator.this.generation = new Generation(joinResponse.generationId(),
                                 joinResponse.memberId(), joinResponse.groupProtocol());
+                        // 判断是否是leader，也就是当前发送过去memberid是否等于leaderId
                         if (joinResponse.isLeader()) {
                             onJoinLeader(joinResponse).chain(future);
                         } else {
@@ -517,12 +521,15 @@ public abstract class AbstractCoordinator implements Closeable {
     private RequestFuture<ByteBuffer> onJoinLeader(JoinGroupResponse joinResponse) {
         try {
             // perform the leader synchronization and send back the assignment for the group
+            // 得到分区分配方案
             Map<String, ByteBuffer> groupAssignment = performAssignment(joinResponse.leaderId(), joinResponse.groupProtocol(),
                     joinResponse.members());
 
             SyncGroupRequest.Builder requestBuilder =
                     new SyncGroupRequest.Builder(groupId, generation.generationId, generation.memberId, groupAssignment);
             log.debug("Sending leader SyncGroup to coordinator {}: {}", this.coordinator, requestBuilder);
+            // 发送syncGroup请求
+            // 其中包含了分区分配方案
             return sendSyncGroupRequest(requestBuilder);
         } catch (RuntimeException e) {
             return RequestFuture.failure(e);
@@ -577,6 +584,7 @@ public abstract class AbstractCoordinator implements Closeable {
     private RequestFuture<Void> sendFindCoordinatorRequest(Node node) {
         // initiate the group metadata request
         log.debug("Sending FindCoordinator request to broker {}", node);
+        // 构造寻找coordinator的请求，传入当前的groupId
         FindCoordinatorRequest.Builder requestBuilder =
                 new FindCoordinatorRequest.Builder(FindCoordinatorRequest.CoordinatorType.GROUP, this.groupId);
         return client.send(node, requestBuilder)
@@ -761,6 +769,7 @@ public abstract class AbstractCoordinator implements Closeable {
         log.debug("Sending Heartbeat request to coordinator {}", coordinator);
         HeartbeatRequest.Builder requestBuilder =
                 new HeartbeatRequest.Builder(this.groupId, this.generation.generationId, this.generation.memberId);
+        // 将handler传入，处理对应响应，并且执行外部回调
         return client.send(coordinator, requestBuilder)
                 .compose(new HeartbeatResponseHandler());
     }

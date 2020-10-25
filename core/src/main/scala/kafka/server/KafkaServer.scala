@@ -359,6 +359,8 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
       throw new java.lang.SecurityException(s"${KafkaConfig.ZkEnableSecureAclsProp} is true, but the verification of the JAAS login file failed.")
 
     // make sure chroot path exists
+    // 这个就是ip:port/root后面的这个/root
+    // 需要确保这个根路径一定要先存在
     chrootOption.foreach { chroot =>
       val zkConnForChrootCreation = config.zkConnect.substring(0, chrootIndex)
       val zkClient = createZkClient(zkConnForChrootCreation, secureAclsEnabled)
@@ -366,8 +368,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
       info(s"Created zookeeper path $chroot")
       zkClient.close()
     }
-
+    // 创建zkClient并赋值给对应的组件
     _zkClient = createZkClient(config.zkConnect, secureAclsEnabled)
+    // 创建顶层的路径和节点
     _zkClient.createTopLevelPaths()
   }
 

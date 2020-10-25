@@ -650,6 +650,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                           Deserializer<K> keyDeserializer,
                           Deserializer<V> valueDeserializer) {
         try {
+            // 一些基础配置项
             String clientId = config.getString(ConsumerConfig.CLIENT_ID_CONFIG);
             if (clientId.isEmpty())
                 clientId = "consumer-" + CONSUMER_CLIENT_ID_SEQUENCE.getAndIncrement();
@@ -683,6 +684,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             userProvidedConfigs.put(ConsumerConfig.CLIENT_ID_CONFIG, clientId);
             List<ConsumerInterceptor<K, V>> interceptorList = (List) (new ConsumerConfig(userProvidedConfigs, false)).getConfiguredInstances(ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG,
                     ConsumerInterceptor.class);
+            // 拦截器/序列化器模块初始化
             this.interceptors = new ConsumerInterceptors<>(interceptorList);
             if (keyDeserializer == null) {
                 this.keyDeserializer = config.getConfiguredInstance(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
@@ -714,7 +716,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             Sensor throttleTimeSensor = Fetcher.throttleTimeSensor(metrics, metricsRegistry.fetcherMetrics);
 
             int heartbeatIntervalMs = config.getInt(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG);
-
+            // 网络模块
             NetworkClient netClient = new NetworkClient(
                     new Selector(config.getLong(ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG), metrics, time, metricGrpPrefix, channelBuilder, logContext),
                     this.metadata,
@@ -730,6 +732,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     new ApiVersions(),
                     throttleTimeSensor,
                     logContext);
+            // 将公共的网络模块封装到consumerNetworkClient中
             this.client = new ConsumerNetworkClient(
                     logContext,
                     netClient,
@@ -743,6 +746,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             this.assignors = config.getConfiguredInstances(
                     ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG,
                     PartitionAssignor.class);
+            // 协调器组件
             this.coordinator = new ConsumerCoordinator(logContext,
                     this.client,
                     groupId,
@@ -761,6 +765,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     this.interceptors,
                     config.getBoolean(ConsumerConfig.EXCLUDE_INTERNAL_TOPICS_CONFIG),
                     config.getBoolean(ConsumerConfig.LEAVE_GROUP_ON_CLOSE_CONFIG));
+            // 消息拉取组件
             this.fetcher = new Fetcher<>(
                     logContext,
                     this.client,
@@ -1122,7 +1127,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     // wakeups or any other errors to be triggered prior to returning the fetched records.
                     if (fetcher.sendFetches() > 0 || client.hasPendingRequests())
                         client.pollNoWakeup();
-
+                    // 拿到数据后，执行拦截器逻辑
                     return this.interceptors.onConsume(new ConsumerRecords<>(records));
                 }
 
@@ -1152,11 +1157,13 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         boolean hasAllFetchPositions = updateFetchPositions();
 
         // if data is available already, return it immediately
+        // 如果数据已经就绪，则立即返回（从缓存中）
         Map<TopicPartition, List<ConsumerRecord<K, V>>> records = fetcher.fetchedRecords();
         if (!records.isEmpty())
             return records;
 
         // send any new fetches (won't resend pending fetches)
+        // 发送FETCH请求拉取数据
         fetcher.sendFetches();
 
         long nowMs = time.milliseconds();
@@ -1181,7 +1188,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         // prior to returning data so that the group can stabilize faster
         if (coordinator.needRejoin())
             return Collections.emptyMap();
-
+        // 再次从缓存中取
         return fetcher.fetchedRecords();
     }
 
