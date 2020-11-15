@@ -254,6 +254,7 @@ class PartitionStateMachine(config: KafkaConfig,
     val successfulElections = mutable.Buffer.empty[TopicPartition]
     var remaining = partitions
     while (remaining.nonEmpty) {
+      // 分区leader选举入口
       val (success, updatesToRetry, failedElections) = doElectLeaderForPartitions(partitions, partitionLeaderElectionStrategy)
       remaining = updatesToRetry
       successfulElections ++= success
@@ -316,6 +317,7 @@ class PartitionStateMachine(config: KafkaConfig,
       return (Seq.empty, Seq.empty, failedElections.toMap)
     }
     val shuttingDownBrokers  = controllerContext.shuttingDownBrokerIds.toSet
+    // 根据选举策略，进行leader副本的选举
     val (partitionsWithoutLeaders, partitionsWithLeaders) = partitionLeaderElectionStrategy match {
       case OfflinePartitionLeaderElectionStrategy =>
         leaderForOffline(validPartitionsForElection).partition { case (_, newLeaderAndIsrOpt, _) => newLeaderAndIsrOpt.isEmpty }
@@ -396,6 +398,7 @@ class PartitionStateMachine(config: KafkaConfig,
       val assignment = controllerContext.partitionReplicaAssignment(partition)
       val liveReplicas = assignment.filter(replica => controllerContext.isReplicaOnline(replica, partition))
       val isr = leaderIsrAndControllerEpoch.leaderAndIsr.isr
+      // 算法函数入口
       val leaderOpt = PartitionLeaderElectionAlgorithms.preferredReplicaPartitionLeaderElection(assignment, isr, liveReplicas.toSet)
       val newLeaderAndIsrOpt = leaderOpt.map(leader => leaderIsrAndControllerEpoch.leaderAndIsr.newLeader(leader))
       (partition, newLeaderAndIsrOpt, assignment)
@@ -453,6 +456,7 @@ object PartitionLeaderElectionAlgorithms {
   }
 
   def preferredReplicaPartitionLeaderElection(assignment: Seq[Int], isr: Seq[Int], liveReplicas: Set[Int]): Option[Int] = {
+    // 遍历AR，直到找到ISR中存活的那个副本，就作为leader
     assignment.headOption.filter(id => liveReplicas.contains(id) && isr.contains(id))
   }
 

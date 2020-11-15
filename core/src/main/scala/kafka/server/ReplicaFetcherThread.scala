@@ -269,6 +269,7 @@ class ReplicaFetcherThread(name: String,
       if (partitionFetchState.isReadyForFetch && !shouldFollowerThrottle(quota, topicPartition)) {
         try {
           val logStartOffset = replicaMgr.getReplicaOrException(topicPartition).logStartOffset
+          // PartitionData中设置fetchOffset/logstartOffset/maxbytes（1M）
           builder.add(topicPartition, new JFetchRequest.PartitionData(
             partitionFetchState.fetchOffset, logStartOffset, fetchSize))
         } catch {
@@ -283,7 +284,7 @@ class ReplicaFetcherThread(name: String,
     val fetchData = builder.build()
     // 传入关键参数，构造请求
     // maxBytes：当前每个分区最多能拉取多少数据，默认当前请求只能拉取10MB
-    // minBytes：最少要拉取到多少数据才返回，默认1KB
+    // minBytes：最少要拉取到多少数据才返回，默认1B
     // maxWait：如果一直拉不到数据，需要阻塞等待多长时间，默认500ms
     val requestBuilder = JFetchRequest.Builder.
       forReplica(fetchRequestVersion, replicaId, maxWait, minBytes, fetchData.toSend())

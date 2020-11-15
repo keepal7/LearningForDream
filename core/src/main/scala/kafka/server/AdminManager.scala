@@ -78,7 +78,7 @@ class AdminManager(val config: KafkaConfig,
 
     // 1. map over topics creating assignment and calling zookeeper
     val brokers = metadataCache.getAliveBrokers.map { b => kafka.admin.BrokerMetadata(b.id, b.rack) }
-    // 遍历
+    // 遍历创建，得到创建结果<tp,result>
     val metadata = createInfo.map { case (topic, arguments) =>
       try {
         val configs = new Properties()
@@ -140,6 +140,8 @@ class AdminManager(val config: KafkaConfig,
     }
 
     // 2. if timeout <= 0, validateOnly or no topics can proceed return immediately
+    // 如果timeout<=0、仅仅校验、没有topics能够执行创建，就立刻返回。
+    // 下面这个判断是这个map中每一个topic的状态都是error（上面的topicname都校验失败了），即没有一个是成功的。
     if (timeout <= 0 || validateOnly || !metadata.exists(_.error.is(Errors.NONE))) {
       val results = metadata.map { createTopicMetadata =>
         // ignore topics that already have errors
@@ -152,6 +154,7 @@ class AdminManager(val config: KafkaConfig,
       responseCallback(results)
     } else {
       // 3. else pass the assignments and errors to the delayed operation and set the keys
+      // 加入延时组件中
       val delayedCreate = new DelayedCreatePartitions(timeout, metadata.toSeq, this, responseCallback)
       val delayedCreateKeys = createInfo.keys.map(new TopicKey(_)).toSeq
       // try to complete the request immediately, otherwise put it into the purgatory

@@ -250,7 +250,7 @@ final class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: Stri
 
     isCompletedByMe = operation.maybeTryComplete()
     if (isCompletedByMe)
-      return true
+      return true在下一次的Fetch请求中，就可以拉到该分区的数据了。
 
     // if it cannot be completed by now and hence is watched, add to the expire queue also
     if (!operation.isCompleted) {

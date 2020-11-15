@@ -1156,6 +1156,8 @@ class KafkaController(val config: KafkaConfig, zkClient: KafkaZkClient, time: Ti
     override def process(): Unit = {
       // 检查/controller这个znode是否存在
       // 然后注册该节点(创建/删除/数据改变)对应handler
+      // 这里注册的handler其实就是注册对这个znode的watcher，然后一旦节点发生变化，
+      // 就根据具体的事件执行具体的handler逻辑
       zkClient.registerZNodeChangeHandlerAndCheckExistence(controllerChangeHandler)
       // 然后执行选举
       elect()
@@ -1471,13 +1473,17 @@ class KafkaController(val config: KafkaConfig, zkClient: KafkaZkClient, time: Ti
       if (!isActive) return
       val sequenceNumbers = zkClient.getAllIsrChangeNotifications
       try {
+        // 拿到/isr_change_notifacation/下的子节点数据
         val partitions = zkClient.getPartitionsFromIsrChangeNotifications(sequenceNumbers)
         if (partitions.nonEmpty) {
+          // 更新本地缓存
           updateLeaderAndIsrCache(partitions)
+          // 更新集群元数据
           processUpdateNotifications(partitions)
         }
       } finally {
         // delete the notifications
+        // 删除子节点
         zkClient.deleteIsrChangeNotifications(sequenceNumbers)
       }
     }

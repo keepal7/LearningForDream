@@ -117,7 +117,7 @@ class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time
 
   private def createAcceptorAndProcessors(processorsPerListener: Int,
                                           endpoints: Seq[EndPoint]): Unit = synchronized {
-    // socket缓冲区，默认都是128kb
+    // socket缓冲区，默认都是100kb
     val sendBufferSize = config.socketSendBufferBytes
     val recvBufferSize = config.socketReceiveBufferBytes
     val brokerId = config.brokerId
@@ -314,8 +314,11 @@ private[kafka] class Acceptor(val endPoint: EndPoint,
                               brokerId: Int,
                               connectionQuotas: ConnectionQuotas) extends AbstractServerThread(connectionQuotas) with KafkaMetricsGroup {
 
+  // 打开NioSelector
   private val nioSelector = NSelector.open()
+  // 打开服务端的父信道
   val serverChannel = openServerSocket(endPoint.host, endPoint.port)
+  // 初始化processors
   private val processors = new ArrayBuffer[Processor]()
 
   private[network] def addProcessors(newProcessors: Buffer[Processor]): Unit = synchronized {

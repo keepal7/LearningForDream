@@ -141,6 +141,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
         if (end < 0 || end >= start + sizeInBytes())
             end = start + sizeInBytes();
         // 通过fileChannel读取对应的数据，在已知start/end的情况下，直接读取数据到buffer中
+        // 计算得到了start/end，再根据当前文件的file channel直接封装成一个fileRecords返回
         return new FileRecords(file, channel, this.start + position, end, true);
     }
 

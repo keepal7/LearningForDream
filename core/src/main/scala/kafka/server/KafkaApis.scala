@@ -225,6 +225,8 @@ class KafkaApis(val requestChannel: RequestChannel,
       val deletedPartitions = replicaManager.maybeUpdateMetadataCache(correlationId, updateMetadataRequest)
       // 看下这个broker下管理的消费组，消费的partition是不是有被删除的
       // 如果有的话，就有执行对应的handler
+      // 这个broker作为coordinator管理的消费组相关的分区是否有变化
+      // 这个handler具体是干嘛，不清楚？
       if (deletedPartitions.nonEmpty)
         groupCoordinator.handleDeletedPartitions(deletedPartitions)
 
@@ -1377,6 +1379,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
 
     // 如果当前节点不是controller，则不让执行这个请求
+    // 在adminClient发送这个请求的时候，是否会选取controller节点？
     if (!controller.isActive) {
       val results = createTopicsRequest.topics.asScala.map { case (topic, _) =>
         (topic, new ApiError(Errors.NOT_CONTROLLER, null))

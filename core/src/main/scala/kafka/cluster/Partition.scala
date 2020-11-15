@@ -620,6 +620,7 @@ class Partition(val topic: String,
           // 在下一次的Fetch请求中，就可以拉到该分区的数据了。
           replicaManager.tryCompleteDelayedFetch(TopicPartitionOperationKey(this.topic, this.partitionId))
           // we may need to increment high watermark since ISR could be down to 1
+          // 当这次写入成功之后，可能ISR就剩下leader这么一个，所以跟着也更新HW
           (info, maybeIncrementLeaderHW(leaderReplica))
 
         case None =>

@@ -335,7 +335,7 @@ class ReplicaManager(val config: KafkaConfig,
     // start ISR expiration thread
     // A follower can lag behind leader for up to config.replicaLagTimeMaxMs x 1.5 before it is removed from ISR
     // 这里设定的执行周期是 replicaLagTimeMaxMs / 2
-    // 也就是默认是5s检查一次。上面的英文说得是一个follower最多能落后leader config.replicaLagTimeMaxMs x 1.5 也就是15ms
+    // 也就是默认是5s检查一次。上面的英文说得是一个follower最多能落后leader config.replicaLagTimeMaxMs x 1.5 也就是15s
     // 0.10的版本，就是10s，这种情况下，可以允许follower落后20s
     // 这个任务 主要是去更新zk上的节点，然后写数据到isrChangeSet 里面
     scheduler.schedule("isr-expiration", maybeShrinkIsr _, period = config.replicaLagTimeMaxMs / 2, unit = TimeUnit.MILLISECONDS)

@@ -212,7 +212,7 @@ class Log(@volatile var dir: File,
 
   locally {
     val startMs = time.milliseconds
-
+    // 加载logSegment并封装成对象
     val nextOffset = loadSegments()
 
     /* Calculate the offset of the next message */
@@ -1000,6 +1000,7 @@ class Log(@volatile var dir: File,
           abortedTransactions = abortedTransactions)
       }
       // 根据startOffset判断，得到具体的segmentEntry
+      // 这个segments的底层数据结构就是跳表<startOffset,segment>
       var segmentEntry = segments.floorEntry(startOffset)
 
       // return error on attempt to read beyond the log end offset or read below log start offset

@@ -301,6 +301,7 @@ class LogManager(logDirs: Seq[File],
     for (dir <- liveLogDirs) {
       try {
         // 创建线程池，这里numRecoveryThreadsPerDataDir实际上是IOThread
+        // 这里的线程池跟IOThread没啥大的关系，只是复用了这个配置而已，就是针对每个dir都起这么个线程池。
         val pool = Executors.newFixedThreadPool(numRecoveryThreadsPerDataDir)
         threadPools.append(pool)
 
