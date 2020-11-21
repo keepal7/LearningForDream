@@ -750,8 +750,8 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             this.coordinator = new ConsumerCoordinator(logContext,
                     this.client,
                     groupId,
-                    config.getInt(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG),
-                    config.getInt(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG),
+                    config.getInt(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG),// 默认5分钟
+                    config.getInt(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG),// 默认10s
                     heartbeatIntervalMs,
                     assignors,
                     this.metadata,
@@ -1174,8 +1174,9 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         // since the offset lookup may be backing off after a failure
         if (!hasAllFetchPositions && pollTimeout > retryBackoffMs)
             pollTimeout = retryBackoffMs;
-
+        // 在上面设置完请求之后，由client.poll去进行网络IO
         client.poll(pollTimeout, nowMs, new PollCondition() {
+            // 这个函数是判断FETCH请求是否有拉到数据，如果没有则返回true
             @Override
             public boolean shouldBlock() {
                 // since a fetch might be completed by the background thread, we need this poll condition

@@ -127,9 +127,11 @@ class GroupCoordinator(val brokerId: Int,
       // 如果group都还不存在，就有了memberId,则认为是非法请求，直接拒绝。
       groupManager.getGroup(groupId) match {
         case None =>
+          // 这里group都还不存在的情况下，memberId自然是空的
           if (memberId != JoinGroupRequest.UNKNOWN_MEMBER_ID) {
             responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))
           } else {
+            // 初始状态是EMPTY
             val group = groupManager.addGroup(new GroupMetadata(groupId, initialState = Empty))
             // 执行具体的加组操作
             doJoinGroup(group, memberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
@@ -204,6 +206,7 @@ class GroupCoordinator(val brokerId: Int,
             }
 
           case Empty | Stable =>
+            // 初始状态是EMPTY,添加member并且执行rebalance
             if (memberId == JoinGroupRequest.UNKNOWN_MEMBER_ID) {
               // if the member id is unknown, register the member to the group
               addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, clientId, clientHost, protocolType, protocols, group, responseCallback)
@@ -754,7 +757,7 @@ class GroupCoordinator(val brokerId: Int,
         max(group.rebalanceTimeoutMs - groupConfig.groupInitialRebalanceDelayMs, 0))
     else
       new DelayedJoin(this, group, group.rebalanceTimeoutMs)
-
+    // 状态转换：EMPTY -> PreparingRebalance
     group.transitionTo(PreparingRebalance)
     // rebalance开始标志日志
     info(s"Preparing to rebalance group ${group.groupId} with old generation ${group.generationId} " +

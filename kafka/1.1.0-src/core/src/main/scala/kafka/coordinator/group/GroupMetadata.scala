@@ -203,7 +203,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
     assert(groupId == member.groupId)
     assert(this.protocolType.orNull == member.protocolType)
     assert(supportsProtocols(member.protocols))
-    // coordinator选举leader很简单，就第发送join_group请求的那个member
+    // coordinator选举leader很简单，就第一个发送join_group请求的那个member
     if (leaderId.isEmpty)
       leaderId = Some(member.memberId)
     members.put(member.memberId, member)
@@ -235,6 +235,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   // TODO: decide if ids should be predictable or random
   def generateMemberIdSuffix = UUID.randomUUID().toString
 
+  // 这里是传入PreparingRebalance状态，然后获取到一个SET
+  // 翻译一下：就是只有这个SET里面的状态，才能开启rebalance
   def canRebalance = GroupMetadata.validPreviousStates(PreparingRebalance).contains(state)
 
   def transitionTo(groupState: GroupState) {

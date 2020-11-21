@@ -55,6 +55,7 @@ public class SubscriptionState {
             "Subscription to topics, partitions and pattern are mutually exclusive";
 
     private enum SubscriptionType {
+        // NONE，用户自定义TOPICS，用户自定义正则，assign方式
         NONE, AUTO_TOPICS, AUTO_PATTERN, USER_ASSIGNED
     }
 
@@ -107,7 +108,7 @@ public class SubscriptionState {
     public void subscribe(Set<String> topics, ConsumerRebalanceListener listener) {
         if (listener == null)
             throw new IllegalArgumentException("RebalanceListener cannot be null");
-
+        // 设置订阅类型：用户自定义topics
         setSubscriptionType(SubscriptionType.AUTO_TOPICS);
 
         this.rebalanceListener = listener;

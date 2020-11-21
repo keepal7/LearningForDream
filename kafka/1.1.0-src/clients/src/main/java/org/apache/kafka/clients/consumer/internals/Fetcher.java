@@ -217,7 +217,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
 
                             Set<TopicPartition> partitions = new HashSet<>(response.responseData().keySet());
                             FetchResponseMetricAggregator metricAggregator = new FetchResponseMetricAggregator(sensors, partitions);
-
+                            // 拉取成功就缓存在completedFetches里面
                             for (Map.Entry<TopicPartition, FetchResponse.PartitionData> entry : response.responseData().entrySet()) {
                                 TopicPartition partition = entry.getKey();
                                 long fetchOffset = data.sessionPartitions().get(partition).fetchOffset;
@@ -479,14 +479,18 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         int recordsRemaining = maxPollRecords;
 
         try {
+            // 拉取max.poll.size条数
             while (recordsRemaining > 0) {
+                // 从completedFetches里面取出completedFetch
                 if (nextInLineRecords == null || nextInLineRecords.isFetched) {
                     CompletedFetch completedFetch = completedFetches.peek();
+                    // 如果拉完了，直接break
                     if (completedFetch == null) break;
 
                     nextInLineRecords = parseCompletedFetch(completedFetch);
                     completedFetches.poll();
                 } else {
+                    // 将completedFetch转换成records
                     List<ConsumerRecord<K, V>> records = fetchRecords(nextInLineRecords, recordsRemaining);
                     TopicPartition partition = nextInLineRecords.partition;
                     if (!records.isEmpty()) {

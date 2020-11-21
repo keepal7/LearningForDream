@@ -442,10 +442,11 @@ public abstract class AbstractCoordinator implements Closeable {
 
         // send a join group request to the coordinator
         log.info("(Re-)joining group");
+        // 设置请求参数
         JoinGroupRequest.Builder requestBuilder = new JoinGroupRequest.Builder(
                 groupId,
                 this.sessionTimeoutMs,
-                this.generation.memberId,
+                this.generation.memberId,// 默认就是空串
                 protocolType(),
                 metadata()).setRebalanceTimeout(this.rebalanceTimeoutMs);
 
@@ -475,6 +476,7 @@ public abstract class AbstractCoordinator implements Closeable {
                         if (joinResponse.isLeader()) {
                             onJoinLeader(joinResponse).chain(future);
                         } else {
+                            // 作为follower加入到group中
                             onJoinFollower().chain(future);
                         }
                     }
@@ -521,7 +523,7 @@ public abstract class AbstractCoordinator implements Closeable {
     private RequestFuture<ByteBuffer> onJoinLeader(JoinGroupResponse joinResponse) {
         try {
             // perform the leader synchronization and send back the assignment for the group
-            // 得到分区分配方案
+            // leader进行分区方案制定
             Map<String, ByteBuffer> groupAssignment = performAssignment(joinResponse.leaderId(), joinResponse.groupProtocol(),
                     joinResponse.members());
 

@@ -249,11 +249,13 @@ public class ConsumerNetworkClient implements Closeable {
             handlePendingDisconnects();
 
             // send all the requests we can send now
+            // 复用networkClient的doSend函数，将send缓存在kafkaSelector和inflightRequests中
             trySend(now);
 
             // check whether the poll is still needed by the caller. Note that if the expected completion
             // condition becomes satisfied after the call to shouldBlock() (because of a fired completion
             // handler), the client will be woken up.
+            // 网络IO处理
             if (pendingCompletion.isEmpty() && (pollCondition == null || pollCondition.shouldBlock())) {
                 // if there are no requests in flight, do not block longer than the retry backoff
                 if (client.inFlightRequestCount() == 0)

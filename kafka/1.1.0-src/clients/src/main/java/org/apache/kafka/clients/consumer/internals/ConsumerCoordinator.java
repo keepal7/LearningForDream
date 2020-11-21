@@ -272,25 +272,30 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
      * @param now current time in milliseconds
      */
     public void poll(long now, long remainingMs) {
+        // 执行已完成的位移提交的回调函数
         invokeCompletedOffsetCommitCallbacks();
-
+        // 如果不是assign模式，那么就走消费组的策略
         if (subscriptions.partitionsAutoAssigned()) {
+            // 确认coordinator
             if (coordinatorUnknown()) {
                 ensureCoordinatorReady();
                 now = time.milliseconds();
             }
-
+            // 分区信息/订阅信息出现变化，则需要进行REJOIN
             if (needRejoin()) {
                 // due to a race condition between the initial metadata fetch and the initial rebalance,
                 // we need to ensure that the metadata is fresh before joining initially. This ensures
                 // that we have matched the pattern against the cluster's topics at least once before joining.
+                // 如果是按照正则方式订阅，那么需要确认元数据是否需要更新
                 if (subscriptions.hasPatternSubscription())
                     client.ensureFreshMetadata();
-
+                // 1、二次确认coordinator
+                // 2、启动heartbeatThread
+                // 3、发送JOIN_GROUP请求
                 ensureActiveGroup();
                 now = time.milliseconds();
             }
-
+            // 检查心跳线程状态
             pollHeartbeat(now);
         } else {
             // For manually assigned partitions, if there are no ready nodes, await metadata.
@@ -428,10 +433,12 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
             return false;
 
         // we need to rejoin if we performed the assignment and metadata has changed
+        // 元数据中相关的分区出现变化
         if (assignmentSnapshot != null && !assignmentSnapshot.equals(metadataSnapshot))
             return true;
 
         // we need to join if our subscription has changed since the last join
+        // 订阅信息改变了，可能是增加或者取消了对一些topic的订阅
         if (joinedSubscription != null && !joinedSubscription.equals(subscriptions.subscription()))
             return true;
 
@@ -549,19 +556,20 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
         future.addListener(new RequestFutureListener<Void>() {
             @Override
             public void onSuccess(Void value) {
+                // 拦截器可以对提交成功后也做操作
                 if (interceptors != null)
                     interceptors.onCommit(offsets);
-
+                // 将提交信息缓存
                 completedOffsetCommits.add(new OffsetCommitCompletion(cb, offsets, null));
             }
 
             @Override
             public void onFailure(RuntimeException e) {
                 Exception commitException = e;
-
+                // 可重试异常
                 if (e instanceof RetriableException)
                     commitException = new RetriableCommitFailedException(e);
-
+                // 也缓存起来
                 completedOffsetCommits.add(new OffsetCommitCompletion(cb, offsets, commitException));
             }
         });
@@ -628,6 +636,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     }
 
     private void doAutoCommitOffsetsAsync() {
+        // 获取已消费的位移信息
         Map<TopicPartition, OffsetAndMetadata> allConsumedOffsets = subscriptions.allConsumed();
         log.debug("Sending asynchronous auto-commit of offsets {}", allConsumedOffsets);
 
