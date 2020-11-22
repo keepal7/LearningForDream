@@ -308,6 +308,8 @@ public class SubscriptionState {
 
     public Map<TopicPartition, OffsetAndMetadata> allConsumed() {
         Map<TopicPartition, OffsetAndMetadata> allConsumed = new HashMap<>();
+        // 从partitionState中获取position信息，也就是上一次poll执行时
+        // 该分区拉取到的最新的一条数据的那个position
         for (PartitionStates.PartitionState<TopicPartitionState> state : assignment.partitionStates()) {
             if (state.value().hasValidPosition())
                 allConsumed.put(state.topicPartition(), new OffsetAndMetadata(state.value().position));

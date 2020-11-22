@@ -236,7 +236,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   def generateMemberIdSuffix = UUID.randomUUID().toString
 
   // 这里是传入PreparingRebalance状态，然后获取到一个SET
-  // 翻译一下：就是只有这个SET里面的状态，才能开启rebalance
+  // 翻译一下：就是只有这个SET（Stable, CompletingRebalance, Empty）里面的状态，才能开启rebalance
   def canRebalance = GroupMetadata.validPreviousStates(PreparingRebalance).contains(state)
 
   def transitionTo(groupState: GroupState) {

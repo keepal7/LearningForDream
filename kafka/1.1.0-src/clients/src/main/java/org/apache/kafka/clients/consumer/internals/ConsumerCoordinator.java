@@ -335,6 +335,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     protected Map<String, ByteBuffer> performAssignment(String leaderId,
                                                         String assignmentStrategy,
                                                         Map<String, ByteBuffer> allSubscriptions) {
+        // 根据策略名称，拿到对应的分区器
         PartitionAssignor assignor = lookupAssignor(assignmentStrategy);
         if (assignor == null)
             throw new IllegalStateException("Coordinator selected invalid assignment protocol: " + assignmentStrategy);
@@ -752,6 +753,8 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
                 long offset = offsetAndMetadata.offset();
 
                 Errors error = entry.getValue();
+                // 没有异常，就直接返回了，future.complete(null);
+                // 有异常就直接future.raise(error);
                 if (error == Errors.NONE) {
                     log.debug("Committed offset {} for partition {}", offset, tp);
                 } else {

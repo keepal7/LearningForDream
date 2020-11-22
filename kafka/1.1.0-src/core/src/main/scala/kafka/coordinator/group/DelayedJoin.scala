@@ -58,6 +58,7 @@ private[group] class InitialDelayedJoin(coordinator: GroupCoordinator,
   override def tryComplete(): Boolean = false
 
   override def onComplete(): Unit = {
+    // 延时任务处理
     group.inLock  {
       if (group.newMemberAdded && remainingMs != 0) {
         group.newMemberAdded = false

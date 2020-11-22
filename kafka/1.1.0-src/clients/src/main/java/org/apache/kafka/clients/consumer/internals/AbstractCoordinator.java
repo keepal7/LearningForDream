@@ -550,10 +550,12 @@ public abstract class AbstractCoordinator implements Closeable {
         public void handle(SyncGroupResponse syncResponse,
                            RequestFuture<ByteBuffer> future) {
             Errors error = syncResponse.error();
+            // 如果sync成功，则更新本地缓存
             if (error == Errors.NONE) {
                 sensors.syncLatency.record(response.requestLatencyMs());
                 future.complete(syncResponse.memberAssignment());
             } else {
+                // 失败，则重新加组
                 requestRejoin();
 
                 if (error == Errors.GROUP_AUTHORIZATION_FAILED) {

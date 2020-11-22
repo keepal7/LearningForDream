@@ -274,9 +274,12 @@ class GroupCoordinator(val brokerId: Int,
           // 只有group处于compeletingRebalance状态下才会被处理
           // 其余状态都是错误的状态
           case CompletingRebalance =>
+            // 给当前member设置回调，之后就啥也不干，也不返回
+            // 等到leader的分区方案就绪后，才会被返回。
             group.get(memberId).awaitingSyncCallback = responseCallback
 
             // if this is the leader, then we can attempt to persist state and transition to stable
+            // 只有收到leader的SYNC才会被处理，并进行状态机流转
             if (group.isLeader(memberId)) {
               info(s"Assignment received from leader for group ${group.groupId} for generation ${group.generationId}")
 
@@ -295,6 +298,7 @@ class GroupCoordinator(val brokerId: Int,
                       maybePrepareRebalance(group)
                     } else {
                       setAndPropagateAssignment(group, assignment)
+                      // 状态机流转：CompletingRebalance -> Stable
                       group.transitionTo(Stable)
                     }
                   }
@@ -651,6 +655,12 @@ class GroupCoordinator(val brokerId: Int,
 
   private def propagateAssignment(group: GroupMetadata, error: Errors) {
     // 遍历
+    // 如果是follower比leader先到SYNC请求
+    // 那么就只会设置个callback，就啥都不干了，也不会返回
+    // 直到leader带着分配方案来了以后，把状态更改为stable之后，才会遍历
+    // 看看有哪些member已经发送了请求过来，设置了callback，然后一次性给他们返回回去对应的分区方案
+    // 所以这个名称叫做【传播分配方案】
+    // 真是绝妙
     for (member <- group.allMemberMetadata) {
       if (member.awaitingSyncCallback != null) {
         // 通过回调告诉member对应的分配方案
@@ -757,7 +767,7 @@ class GroupCoordinator(val brokerId: Int,
         max(group.rebalanceTimeoutMs - groupConfig.groupInitialRebalanceDelayMs, 0))
     else
       new DelayedJoin(this, group, group.rebalanceTimeoutMs)
-    // 状态转换：EMPTY -> PreparingRebalance
+    // 状态机转换：EMPTY -> PreparingRebalance
     group.transitionTo(PreparingRebalance)
     // rebalance开始标志日志
     info(s"Preparing to rebalance group ${group.groupId} with old generation ${group.generationId} " +
@@ -797,6 +807,7 @@ class GroupCoordinator(val brokerId: Int,
       }
 
       if (!group.is(Dead)) {
+        // 状态机流转 ： preparingRebalancing -> CompletingRebalance
         group.initNextGeneration()
         if (group.is(Empty)) {
           info(s"Group ${group.groupId} with generation ${group.generationId} is now empty " +
@@ -819,6 +830,7 @@ class GroupCoordinator(val brokerId: Int,
           for (member <- group.allMemberMetadata) {
             assert(member.awaitingJoinCallback != null)
             val joinResult = JoinGroupResult(
+              // 如果是leader 就返回member列表及其元数据信息
               members = if (group.isLeader(member.memberId)) {
                 group.currentMemberMetadata
               } else {
@@ -850,6 +862,7 @@ class GroupCoordinator(val brokerId: Int,
   def onExpireHeartbeat(group: GroupMetadata, member: MemberMetadata, heartbeatDeadline: Long) {
     group.inLock {
       if (!shouldKeepMemberAlive(member, heartbeatDeadline)) {
+        // 标识日志
         info(s"Member ${member.memberId} in group ${group.groupId} has failed, removing it from the group")
         removeMemberAndUpdateGroup(group, member)
       }

@@ -529,12 +529,18 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                     partitionRecords.partition);
         } else {
             long position = subscriptions.position(partitionRecords.partition);
+            // 比较内存中记录的nextFetchOffset是否等于这次拉取下来的数据的起始位移
             if (partitionRecords.nextFetchOffset == position) {
                 List<ConsumerRecord<K, V>> partRecords = partitionRecords.fetchRecords(maxRecords);
 
                 long nextOffset = partitionRecords.nextFetchOffset;
                 log.trace("Returning fetched records at offset {} for assigned partition {} and update " +
                         "position to {}", position, partitionRecords.partition, nextOffset);
+                // 更新当前分区的消费位移信息 = nextOffset
+                // 因此在这次拉取完成后，根据partitionState.position拿到的位移信息，一定都是curRecords.offset+1
+                // 所以无论是异步/同步提交，都是直接把这一批数据给提交上去了，反而可能会导致数据丢失。
+                // 反观自动提交，是在上一批数据消费完之后，才去提交的，因此在同步消费上一批数据的情况下，只会造成重复消费，而不会消息丢失。
+                // 如果是异步执行的方式，那么必然会有重复消费/消息丢失的风险。
                 subscriptions.position(partitionRecords.partition, nextOffset);
 
                 Long partitionLag = subscriptions.partitionLag(partitionRecords.partition, isolationLevel);
@@ -1152,6 +1158,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                     records.add(parseRecord(partition, currentBatch, lastRecord));
                     recordsRead++;
                     bytesRead += lastRecord.sizeInBytes();
+                    // 可以看到设置的nextFetchOffset等于当前最新的offset+1
                     nextFetchOffset = lastRecord.offset() + 1;
                     // In some cases, the deserialization may have thrown an exception and the retry may succeed,
                     // we allow user to move forward in this case.
