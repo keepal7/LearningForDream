@@ -2,7 +2,7 @@
 
 kafka源码注释：done
 
-随源码注释相关思维导图：
+随源码注释相关思维导图：  
 生产者源码：
 https://www.processon.com/view/link/5fba2c020791293c54294a97
 服务端网络模块：
@@ -20,3 +20,5 @@ https://www.processon.com/view/link/5fba2c92e0b34d0d2249745f
 https://www.processon.com/i/5822999fe4b01871e7a5eae1
 
 to be continue...
+
+netty相关
