@@ -155,6 +155,7 @@ public final class ChannelOutboundBuffer {
             } while (entry != null);
 
             // All flushed so reset unflushedEntry
+            // 将之前缓存的需要发送的数据全部转移后，这个置为null
             unflushedEntry = null;
         }
     }

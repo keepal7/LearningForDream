@@ -37,6 +37,8 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
     private static final int DEFAULT_EVENT_LOOP_THREADS;
 
     static {
+        // 配置优先级最高，但是最低，这个线程数量也需要是1
+        // 如果没有配置，那么就根据当前机器的CPU个数 * 2 ，例如8U16G的机器，这里的线程数就是16
         DEFAULT_EVENT_LOOP_THREADS = Math.max(1, SystemPropertyUtil.getInt(
                 "io.netty.eventLoopThreads", NettyRuntime.availableProcessors() * 2));
 
@@ -83,6 +85,8 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
 
     @Override
     public ChannelFuture register(Channel channel) {
+        // 从eventLoopGroup中轮询出来一个NioEventLoop，
+        // 然后把这个channel注册到对应的selector上
         return next().register(channel);
     }
 

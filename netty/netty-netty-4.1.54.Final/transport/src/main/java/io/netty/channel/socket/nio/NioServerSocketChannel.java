@@ -59,6 +59,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
              *
              *  See <a href="https://github.com/netty/netty/issues/2308">#2308</a>.
              */
+            // 通过NIO原生API获得一个ServerSocketChannel
             return provider.openServerSocketChannel();
         } catch (IOException e) {
             throw new ChannelException(
@@ -86,7 +87,9 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link ServerSocketChannel}.
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
+        // 传入对应的网络事件是OP_ACCEPT
         super(null, channel, SelectionKey.OP_ACCEPT);
+        // 缓存配置
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());
     }
 
@@ -144,10 +147,13 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
+        // 在感知到OP_ACCEPT事件以后，对serverSocketChannel调用accpet()
+        // 拿到对应客户端的socketChannel
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
             if (ch != null) {
+                // 然后封装一下，缓存在这个buf中
                 buf.add(new NioSocketChannel(this, ch));
                 return 1;
             }

@@ -129,9 +129,10 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 设置我们自己设置的channel参数和属性
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, attrs0().entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY));
-
+        // 拿到这个channel对应的pipeline
         ChannelPipeline p = channel.pipeline();
 
         final EventLoopGroup currentChildGroup = childGroup;
@@ -141,16 +142,18 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             currentChildOptions = childOptions.entrySet().toArray(EMPTY_OPTION_ARRAY);
         }
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY);
-
+        // 然后加入我们自己设置的handler，以及内置的handler
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
+                // 自己设置的handler
                 ChannelHandler handler = config.handler();
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
-
+                // 内置的handler，在初始化serverSocketChannel的时候放入
+                // 其内容就是把accept拿到的socketChannel传入到childGroup中
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
@@ -207,13 +210,14 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            // 这里就是处理完OP_ACCEPT的客户端连接，封装后的NettySocketChannel
             final Channel child = (Channel) msg;
 
             child.pipeline().addLast(childHandler);
-
+            // 设置参数和属性
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
-
+            // 从clildGroup中选取一个NioEventLoop，将channel注册到对应selector上
             try {
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override

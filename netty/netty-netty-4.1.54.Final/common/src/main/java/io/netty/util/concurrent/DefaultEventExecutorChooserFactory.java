@@ -32,6 +32,9 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
     @Override
     public EventExecutorChooser newChooser(EventExecutor[] executors) {
+        // 这两个Chooser的next函数目的都是为了轮询取得NioEventLoop
+        // 但是如果这个数组长度是2的幂次方，这个时候就可以采取 var & (len-1)来进行取模，效率远高于 % 取模
+        // 如果不满足这个条件，就只能使用通用的方式，及通过 % 进行取模
         if (isPowerOfTwo(executors.length)) {
             return new PowerOfTwoEventExecutorChooser(executors);
         } else {
@@ -40,6 +43,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
     }
 
     private static boolean isPowerOfTwo(int val) {
+        // 这个可以用来判断val是否是2的次幂
         return (val & -val) == val;
     }
 

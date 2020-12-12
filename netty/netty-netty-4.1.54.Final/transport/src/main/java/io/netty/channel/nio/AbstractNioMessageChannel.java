@@ -64,6 +64,9 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             assert eventLoop().inEventLoop();
             final ChannelConfig config = config();
             final ChannelPipeline pipeline = pipeline();
+            // RecvByteBufAllocator会动态的根据上一次请求获取到的数据大小
+            // 动态预估这次请求的数据大小大致会有多少
+            // 然后根据这个预估的大小，创建出一个缓冲区出来接收数据
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
             allocHandle.reset(config);
 
@@ -72,6 +75,10 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
+                        // 这里是所有read操作的总入口
+                        // 这是个接口函数，对应的channel有对应的实现
+                        // 最后读取到的东西，会被放在这个readBuf的list中
+                        // 接着向后传递
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -90,6 +97,12 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    // 调用serverBootStrap中的channelRead函数
+                    // 将得到的socketChannel交给ClildGroup中的某个NioEventLoop进行管理
+                    // 本质上还是reactor的设计模式  parentGroup -> childGroup
+                    // 【注】
+                    // 这个本质上是在流水线上的handler，不过在处理serverSocketChannel的时候，是执行的对应的内置handler
+                    // 把channel丢入childGroup中
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
                 readBuf.clear();

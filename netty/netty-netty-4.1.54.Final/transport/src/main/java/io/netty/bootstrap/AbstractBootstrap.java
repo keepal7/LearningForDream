@@ -106,6 +106,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * {@link Channel} implementation has no no-args constructor.
      */
     public B channel(Class<? extends C> channelClass) {
+        // 在这里设置了NioServerSocketChannel的class
+        // 让这个factory内部的constructor是这class的构造器
         return channelFactory(new ReflectiveChannelFactory<C>(
                 ObjectUtil.checkNotNull(channelClass, "channelClass")
         ));
@@ -269,12 +271,15 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // 这里其实就是做了两件事：
+        // 1、初始化好NettyServerSocketChannel
+        // 2、把这个channel与一个eventLoop绑定，开始轮询网络事件
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
             return regFuture;
         }
-
+        // 开始绑定本地端口
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
@@ -307,6 +312,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            // 得到一个nettyChannel，本质上是执行NioServerSocketChannel的构造器，封装了以下信息：
+            // 1、创建这个NettyChannel对应的pipeline
+            // 2、获取到NioServerSocketChannel，并缓存起来
+            // 3、NettyChannel中的兴趣事件设置为OP_ACCEPT
+            // 4、将NioServerSocketChannel设置为非阻塞
             channel = channelFactory.newChannel();
             init(channel);
         } catch (Throwable t) {

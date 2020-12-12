@@ -213,6 +213,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     static void invokeChannelActive(final AbstractChannelHandlerContext next) {
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
+            // 流水线上的handler执行的入口
             next.invokeChannelActive();
         } else {
             executor.execute(new Runnable() {
@@ -227,6 +228,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeChannelActive() {
         if (invokeHandler()) {
             try {
+                // 在这儿调用对应的自实现子类里面的channelActive函数
+                // 这儿强转的类型是ChannelInboundHandler，所以跑的是进【入站】的handler
                 ((ChannelInboundHandler) handler()).channelActive(this);
             } catch (Throwable t) {
                 invokeExceptionCaught(t);
@@ -359,8 +362,11 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
+        // 通过ChannelHandlerContext拿到pileline，再拿到对应的Channel
         final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
+        // 得到对应的executor
         EventExecutor executor = next.executor();
+        // 执行内置的channelRead第一个handler，将得到的socketChannel当做MSG传入
         if (executor.inEventLoop()) {
             next.invokeChannelRead(m);
         } else {
@@ -376,6 +382,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeChannelRead(Object msg) {
         if (invokeHandler()) {
             try {
+                // 强转成ChannelInboundHandler开始跑【入站】的流水线
                 ((ChannelInboundHandler) handler()).channelRead(this, msg);
             } catch (Throwable t) {
                 invokeExceptionCaught(t);
@@ -545,6 +552,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeConnect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
+                // connect入口
                 ((ChannelOutboundHandler) handler()).connect(this, remoteAddress, localAddress, promise);
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);
@@ -714,6 +722,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private void invokeWrite0(Object msg, ChannelPromise promise) {
         try {
+            // 强转成ChannelOutboundHandler，开始跑【出站】的流水线
+            // 最后会走到一个defaultChannelPipeline里面，把数据写到对应的缓冲链表中
+            // 等待OP_WRITE事件后，最后从缓冲链表里面取出来数据进行发送
             ((ChannelOutboundHandler) handler()).write(this, msg, promise);
         } catch (Throwable t) {
             notifyOutboundHandlerException(t, promise);

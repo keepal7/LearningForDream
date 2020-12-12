@@ -73,6 +73,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         }
 
         if (executor == null) {
+            // 这里指定对应的线程池实现类型为ThreadPerTaskExecutor
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
@@ -81,6 +82,9 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
+                // 封装一个个的NioEventLoop
+                // 每个NioEventLoop有一个线程和对应的NioSelector
+                // 每个线程就负责轮询NioSelector得到的socketChannel的网络事件。
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
@@ -118,13 +122,14 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 }
             }
         };
-
+        // 注册监听器
         for (EventExecutor e: children) {
             e.terminationFuture().addListener(terminationListener);
         }
-
+        // 缓存起来
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
         Collections.addAll(childrenSet, children);
+        // 不让修改
         readonlyChildren = Collections.unmodifiableSet(childrenSet);
     }
 

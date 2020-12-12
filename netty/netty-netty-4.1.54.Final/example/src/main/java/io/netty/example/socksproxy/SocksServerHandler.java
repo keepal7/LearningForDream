@@ -82,6 +82,7 @@ public final class SocksServerHandler extends SimpleChannelInboundHandler<SocksM
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
+        // 最后调用这里把数据发出去
         ctx.flush();
     }
 

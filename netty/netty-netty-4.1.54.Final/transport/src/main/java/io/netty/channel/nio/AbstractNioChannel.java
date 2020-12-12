@@ -77,10 +77,14 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      * @param readInterestOp    the ops to set to receive data from the {@link SelectableChannel}
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
+        // 在AbstractChannel中创建对应的pipeline
         super(parent);
+        // 将channel缓存起来
         this.ch = ch;
+        // 设置对应的兴趣事件为OP_ACCEPT
         this.readInterestOp = readInterestOp;
         try {
+            // 设置这个channel为非阻塞
             ch.configureBlocking(false);
         } catch (IOException e) {
             try {
@@ -294,6 +298,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
             // Get the state as trySuccess() may trigger an ChannelFutureListener that will close the Channel.
             // We still need to ensure we call fireChannelActive() in this case.
+            // 确认channel可用（open && connected）
             boolean active = isActive();
 
             // trySuccess() will return false if a user cancelled the connection attempt.
@@ -302,6 +307,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Regardless if the connection attempt was cancelled, channelActive() event should be triggered,
             // because what happened is what happened.
             if (!wasActive && active) {
+                // 跑流水线
                 pipeline().fireChannelActive();
             }
 
@@ -331,7 +337,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
             try {
                 boolean wasActive = isActive();
+                // 完成连接
                 doFinishConnect();
+                // 开始跑流水线上的各个handler【inbound】
                 fulfillConnectPromise(connectPromise, wasActive);
             } catch (Throwable t) {
                 fulfillConnectPromise(connectPromise, annotateConnectException(t, requestedRemoteAddress));

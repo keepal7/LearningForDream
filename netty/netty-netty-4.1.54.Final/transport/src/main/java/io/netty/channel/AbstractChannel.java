@@ -72,6 +72,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         this.parent = parent;
         id = newId();
         unsafe = newUnsafe();
+        // 在AbstractChannel中创建对应的pipeline
         pipeline = newChannelPipeline();
     }
 
@@ -463,7 +464,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             AbstractChannel.this.eventLoop = eventLoop;
-
+            // 注册
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
@@ -888,19 +889,19 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 }
                 return;
             }
-
+            // 会把message缓存到outboundBuffer中
             outboundBuffer.addMessage(msg, size, promise);
         }
 
         @Override
         public final void flush() {
             assertEventLoop();
-
+            // 拿到缓存链表
             ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
             if (outboundBuffer == null) {
                 return;
             }
-
+            // 将链表数据中，需要发送的数据，全部进行转移
             outboundBuffer.addFlush();
             flush0();
         }
@@ -938,6 +939,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             try {
+                // 将缓冲区的数据写出去
                 doWrite(outboundBuffer);
             } catch (Throwable t) {
                 handleWriteError(t);
