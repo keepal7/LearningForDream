@@ -94,7 +94,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 logger.debug("Unable to get/set System Property: " + key, e);
             }
         }
-
+        // 默认空轮询次数阈值：512次
         int selectorAutoRebuildThreshold = SystemPropertyUtil.getInt("io.netty.selectorAutoRebuildThreshold", 512);
         if (selectorAutoRebuildThreshold < MIN_PREMATURE_SELECTOR_RETURNS) {
             selectorAutoRebuildThreshold = 0;
@@ -127,7 +127,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE);
 
     private final SelectStrategy selectStrategy;
-
+    // 采用volatile/cas来降低内部线程的锁粒度，从而优化并发性能。
     private volatile int ioRatio = 50;
     private int cancelledKeys;
     private boolean needsToSelectAgain;
@@ -135,10 +135,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
                  SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
                  EventLoopTaskQueueFactory queueFactory) {
+        // 调用父类构造器,创建单线程的线程池
         super(parent, executor, false, newTaskQueue(queueFactory), newTaskQueue(queueFactory),
                 rejectedExecutionHandler);
         this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
         this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
+        // 打开一个selector
         final SelectorTuple selectorTuple = openSelector();
         this.selector = selectorTuple.selector;
         this.unwrappedSelector = selectorTuple.unwrappedSelector;
@@ -378,6 +380,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
 
         try {
+            // 开启新的selector
             newSelectorTuple = openSelector();
         } catch (Exception e) {
             logger.warn("Failed to create a new Selector.", e);
@@ -385,6 +388,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
 
         // Register all channels to the new Selector.
+        // 注册所有socketChannel到newSelector上
         int nChannels = 0;
         for (SelectionKey key: oldSelector.keys()) {
             Object a = key.attachment();
@@ -413,12 +417,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 }
             }
         }
-
+        // 替换掉之前的selector
         selector = newSelectorTuple.selector;
         unwrappedSelector = newSelectorTuple.unwrappedSelector;
 
         try {
             // time to close the old selector as everything else is registered to the new one
+            // 关闭掉之前的出问题的selector，释放资源，防止CPU 100%
             oldSelector.close();
         } catch (Throwable t) {
             if (logger.isWarnEnabled()) {
@@ -433,8 +438,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     @Override
     protected void run() {
+        // 当前selector的空轮询统计值
         int selectCnt = 0;
         for (;;) {
+            // 一层层的try/catch，将对应的异常分成捕捉，以防止核心业务中断。
             try {
                 int strategy;
                 try {
@@ -454,6 +461,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         nextWakeupNanos.set(curDeadlineNanos);
                         try {
                             if (!hasTasks()) {
+                                // 就是一直去通过NioSelector去轮询网络事件
                                 strategy = select(curDeadlineNanos);
                             }
                         } finally {
@@ -472,7 +480,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     handleLoopException(e);
                     continue;
                 }
-
+                // 这个值在有事件的时候会被重置为0
+                // 但是如果是空轮训就会一直累加
                 selectCnt++;
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
@@ -481,6 +490,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 if (ioRatio == 100) {
                     try {
                         if (strategy > 0) {
+                            // 核心函数入口
                             processSelectedKeys();
                         }
                     } finally {
@@ -499,14 +509,16 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 } else {
                     ranTasks = runAllTasks(0); // This will run the minimum number of tasks
                 }
-
+                // 如果有事件，统计值都会被重置为0
                 if (ranTasks || strategy > 0) {
                     if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS && logger.isDebugEnabled()) {
                         logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
                                 selectCnt - 1, selector);
                     }
                     selectCnt = 0;
+                    //如果是空轮询，则检查这个统计值是否达到了阈值
                 } else if (unexpectedSelectorWakeup(selectCnt)) { // Unexpected wakeup (unusual case)
+                    // rebuildSelector之后，重置统计值
                     selectCnt = 0;
                 }
             } catch (CancelledKeyException e) {
@@ -552,6 +564,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
             return true;
         }
+        // 如果空轮询次数达到阈值512次后
+        // 就把这个selector上的socketChannel注册到一个新创建的selector上
+        // 然后把出问题的这个selector给关闭掉，释放资源，防止它空轮询CUP 100%
         if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
                 selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
             // The selector returned prematurely many times in a row.
@@ -652,6 +667,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             final Object a = k.attachment();
 
             if (a instanceof AbstractNioChannel) {
+                // 处理key对应的网络事件
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
                 @SuppressWarnings("unchecked")
@@ -701,9 +717,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
+                // 取消对OP_CONNECT事件的关注
                 ops &= ~SelectionKey.OP_CONNECT;
                 k.interestOps(ops);
-
+                // 调用nioSocketChannel的函数完成连接
                 unsafe.finishConnect();
             }
 
@@ -811,6 +828,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
         // Timeout will only be 0 if deadline is within 5 microsecs
         long timeoutMillis = deadlineToDelayNanos(deadlineNanos + 995000L) / 1000000L;
+        // 如果timeout<=0就立即返回，否则就同步等待超时
         return timeoutMillis <= 0 ? selector.selectNow() : selector.select(timeoutMillis);
     }
 

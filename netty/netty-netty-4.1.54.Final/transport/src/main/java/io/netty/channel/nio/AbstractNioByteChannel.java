@@ -140,6 +140,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             }
             final ChannelPipeline pipeline = pipeline();
             final ByteBufAllocator allocator = config.getAllocator();
+            // 另外一个实现类一样，得到一个RecvByteBufAllocator，它会进行一个大小预估
             final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
             allocHandle.reset(config);
 
@@ -147,12 +148,15 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             boolean close = false;
             try {
                 do {
+                    // 然后通过allocHandle去分配一个bytebuf
                     byteBuf = allocHandle.allocate(allocator);
+                    // 完成数据读取，把数据读取到了byteBuf中
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
                     if (allocHandle.lastBytesRead() <= 0) {
                         // nothing was read. release the buffer.
                         byteBuf.release();
                         byteBuf = null;
+                        // EOF 没啥可读的了
                         close = allocHandle.lastBytesRead() < 0;
                         if (close) {
                             // There is nothing left to read as we received an EOF.
@@ -164,12 +168,13 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                     allocHandle.incMessagesRead(1);
                     readPending = false;
                     pipeline.fireChannelRead(byteBuf);
+                    // 跑完流水线直接就给置为null了，那是怎么复用的呢？
                     byteBuf = null;
                 } while (allocHandle.continueReading());
 
                 allocHandle.readComplete();
                 pipeline.fireChannelReadComplete();
-
+                // 收到RESET包，直接关闭channel
                 if (close) {
                     closeOnRead(pipeline);
                 }
@@ -182,6 +187,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
                 //
                 // See https://github.com/netty/netty/issues/2254
+                // 如果上面EOF了，那么就移除OP_READ事件
                 if (!readPending && !config.isAutoRead()) {
                     removeReadOp();
                 }
@@ -331,6 +337,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             return;
         }
         final int interestOps = key.interestOps();
+        // 如果没有关注OP_WRITE，那么增加对OP_WRITE事件的关注
         if ((interestOps & SelectionKey.OP_WRITE) == 0) {
             key.interestOps(interestOps | SelectionKey.OP_WRITE);
         }
