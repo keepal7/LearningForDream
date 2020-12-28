@@ -42,6 +42,7 @@ public interface UserMapper {
      * @param user 用户信息
      */
     @Insert("INSERT INTO user(name, age) VALUES(#{name}, #{age})")
+    @Options(useGeneratedKeys = true, keyProperty = "id")
     void saveUser(User user);
 
     /**

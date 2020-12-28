@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/user")
+@RequestMapping("/api/v1.0/user")
 public class UserController {
 
     /**
@@ -20,6 +20,8 @@ public class UserController {
      */
     @Autowired
     private UserService userService;
+//	@Value("${my.conf}")
+//	private String myConf;
 
     /**
      * 查询所有用户
@@ -40,6 +42,7 @@ public class UserController {
      * @return 用户信息
      * <p>
      * {id}，就是通过占位符的方式，可以让我们提取请求URL中的参数
+     * 表明说，我要定位的一个资源是id=3的一个用户
      */
     @GetMapping("/{id}")
     public User getUserById(@PathVariable("id") Long id) {
@@ -52,9 +55,10 @@ public class UserController {
      * @param user 用户信息
      */
     @PostMapping("/")
-    public String saveUser(@RequestBody @Validated({User.Save.class}) User user,
-                           BindingResult bindingResult) {
-        // controller在Save时，加入参数校验
+    public String saveUser(
+            @RequestBody @Validated({User.Save.class}) User user,
+            BindingResult bindingResult) {
+        // 如果校验失败，则将校验失败信息返回
         if (bindingResult.hasErrors()) {
             List<ObjectError> errors = bindingResult.getAllErrors();
             FieldError error = (FieldError) errors.get(0);
@@ -63,8 +67,10 @@ public class UserController {
                     + error.getDefaultMessage();
             return "{'status': 'error', 'message': '" + message + "'}";
         }
+
         userService.saveUser(user);
-        return "{'status':'success','message':" + user.getId() + "}";
+
+        return "{'status': 'success', 'message': '新增用户ID为" + user.getId() + "'}";
     }
 
     /**
@@ -73,8 +79,9 @@ public class UserController {
      * @param user 用户信息
      */
     @PutMapping("/{id}")
-    public void updateUser(@RequestBody User user) {
+    public String updateUser(@RequestBody User user) {
         userService.updateUser(user);
+        return "success";
     }
 
     /**
@@ -83,8 +90,10 @@ public class UserController {
      * @param id 用户ID
      */
     @DeleteMapping("/{id}")
-    public void removeUser(@PathVariable("id") Long id) {
+    public String removeUser(@PathVariable("id") Long id) {
         userService.removeUser(id);
+        return "success";
     }
 
 }
+

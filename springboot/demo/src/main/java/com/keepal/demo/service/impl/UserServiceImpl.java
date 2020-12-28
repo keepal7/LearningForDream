@@ -20,7 +20,6 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 查询所有用户
-     *
      * @return 用户信息
      */
     public List<User> listUsers() {
@@ -29,7 +28,6 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 根据ID查询用户
-     *
      * @param id 用户ID
      * @return 用户信息
      */
@@ -39,28 +37,26 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 新增用户
-     *
      * @param user 用户信息
      */
-    public void saveUser(User user) {
-        userDAO.saveUser(user);
+    public Long saveUser(User user) {
+        return userDAO.saveUser(user);
     }
 
     /**
      * 更新用户
-     *
      * @param user 用户信息
      */
-    public void updateUser(User user) {
-        userDAO.updateUser(user);
+    public Boolean updateUser(User user) {
+        return userDAO.updateUser(user);
     }
 
     /**
      * 删除用户
-     *
      * @param id 用户ID
      */
-    public void removeUser(Long id) {
-        userDAO.removeUser(id);
+    public Boolean removeUser(Long id) {
+        return userDAO.removeUser(id);
     }
+
 }

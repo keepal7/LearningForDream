@@ -19,7 +19,6 @@ public class UserDaoImpl implements UserDao {
 
     /**
      * 查询所有用户
-     *
      * @return 用户信息
      */
     public List<User> listUsers() {
@@ -28,7 +27,6 @@ public class UserDaoImpl implements UserDao {
 
     /**
      * 根据ID查询用户
-     *
      * @param id 用户ID
      * @return 用户信息
      */
@@ -38,29 +36,29 @@ public class UserDaoImpl implements UserDao {
 
     /**
      * 新增用户
-     *
      * @param user 用户信息
      */
-    public void saveUser(User user) {
+    public Long saveUser(User user) {
         userMapper.saveUser(user);
+        return user.getId();
     }
 
     /**
      * 更新用户
-     *
      * @param user 用户信息
      */
-    public void updateUser(User user) {
+    public Boolean updateUser(User user) {
         userMapper.updateUser(user);
+        return true;
     }
 
     /**
      * 删除用户
-     *
      * @param id 用户ID
      */
-    public void removeUser(Long id) {
+    public Boolean removeUser(Long id) {
         userMapper.removeUser(id);
+        return true;
     }
 
 }
