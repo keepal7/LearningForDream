@@ -2,6 +2,8 @@ package com.keepal.demo.controller;
 
 import com.keepal.demo.domain.User;
 import com.keepal.demo.service.UserService;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
@@ -14,6 +16,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1.0/user")
 public class UserController {
+
+    private Log log = LogFactory.getLog(UserController.class);
 
     /**
      * 用户管理模块的service组件
@@ -32,6 +36,7 @@ public class UserController {
      */
     @GetMapping("/")
     public List<User> listUsers() {
+        log.info("查询所有用户");
         return userService.listUsers();
     }
 
