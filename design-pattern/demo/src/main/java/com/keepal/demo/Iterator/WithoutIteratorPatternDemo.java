@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * 没有用迭代器设计模式遍历集合
  */
-public class WhitoutIteratorPatternDemo {
+public class WithoutIteratorPatternDemo {
 
     public static void main(String[] args) {
         // 数据准备
