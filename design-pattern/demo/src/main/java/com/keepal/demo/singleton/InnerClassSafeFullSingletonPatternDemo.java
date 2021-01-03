@@ -12,7 +12,6 @@ public class InnerClassSafeFullSingletonPatternDemo {
         private Singleton() {
         }
 
-
         public static Singleton get() {
             return InnerHolder.SINGLETON;
         }
@@ -24,7 +23,5 @@ public class InnerClassSafeFullSingletonPatternDemo {
         static class InnerHolder {
             private static final Singleton SINGLETON = new Singleton();
         }
-
-
     }
 }

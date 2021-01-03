@@ -9,7 +9,8 @@ public class SafeFullSingletonPatternDemo {
 
     public static class Singleton {
 
-        private static Singleton singleton;
+        // 增加volatile防止指令重排
+        private volatile static Singleton singleton;
 
         private static final Object LOCK = new Object();
 
@@ -23,19 +24,23 @@ public class SafeFullSingletonPatternDemo {
          * 就只能等待GC去回收掉。
          *
          * 但是这个操作也并不是100%线程安全的，因为JVM不同的编译器的情况下，可能会出问题。TODO
+         * 在代码
          *
          */
         public Singleton get() {
             if (singleton == null) {
                 synchronized (LOCK) {
                     if (singleton == null) {
+                        // 这个new 的过程可能被可以分解为：
+                        // 1、申请内存 2、创建对象 3、引用赋值
+                        // 如果指令重排，可能就是 312的顺序，实际上对象还没创建好
+                        // 如果这个时候其他线程来访问，发现引用已经被赋值了，就直接返回了，
+                        // 拿去使用就会出现NPE
                         singleton = new Singleton();
                     }
                 }
             }
             return singleton;
         }
-
-
     }
 }
